@@ -1,0 +1,671 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Overtone Concept</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,650&display=swap" rel="stylesheet">
+<style>
+@property --base   { syntax: '<color>'; inherits: true; initial-value: #2a1838; }
+@property --accent { syntax: '<color>'; inherits: true; initial-value: #ff8a5c; }
+@property --ink    { syntax: '<color>'; inherits: true; initial-value: #fff7f2; }
+@property --ink-soft  { syntax: '<color>'; inherits: true; initial-value: #d9c8d8; }
+@property --ink-faint { syntax: '<color>'; inherits: true; initial-value: #a893a8; }
+@property --page   { syntax: '<color>'; inherits: true; initial-value: #141017; }
+@property --page-2 { syntax: '<color>'; inherits: true; initial-value: #1d1722; }
+@property --page-ink  { syntax: '<color>'; inherits: true; initial-value: #efe8ef; }
+@property --page-soft { syntax: '<color>'; inherits: true; initial-value: #b3a6b4; }
+
+:root {
+  --spring-morph: cubic-bezier(.2,.9,.3,1);
+  --spring-lyric: cubic-bezier(.2,.9,.3,1);
+  --dur-morph: 420ms;
+  --dur-lyric: 500ms;
+  --palette-fade: 600ms;
+  --ui: "Segoe UI Variable Text", "Segoe UI Variable", -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  --display: "Bricolage Grotesque", var(--ui);
+  --r-ov: 16px;
+  color-scheme: dark;
+  transition: --base var(--palette-fade), --accent var(--palette-fade), --ink var(--palette-fade),
+              --ink-soft var(--palette-fade), --ink-faint var(--palette-fade), --page var(--palette-fade),
+              --page-2 var(--palette-fade), --page-ink var(--palette-fade), --page-soft var(--palette-fade);
+}
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-morph: 150ms; --dur-lyric: 150ms; --spring-morph: ease-out; --spring-lyric: ease-out; }
+}
+
+* { box-sizing: border-box; }
+html { background: var(--page); }
+body {
+  margin: 0; background: var(--page); color: var(--page-ink);
+  font: 15px/1.55 var(--ui); -webkit-font-smoothing: antialiased;
+}
+::selection { background: var(--accent); color: var(--base); }
+a { color: var(--page-ink); text-decoration-color: color-mix(in oklch, var(--accent) 70%, transparent); text-underline-offset: 3px; }
+a:hover { text-decoration-color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+code { font: 0.86em ui-monospace, "Cascadia Code", Menlo, monospace; background: var(--page-2); padding: .1em .35em; border-radius: 5px; }
+
+.wrap { max-width: 1160px; margin: 0 auto; padding: 0 24px; }
+header.top { padding-top: 56px; padding-bottom: 28px; display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: end; }
+.wordmark { display: flex; align-items: center; gap: 16px; }
+.wordmark svg { width: 56px; height: 56px; flex: none; filter: drop-shadow(0 8px 18px rgba(0,0,0,.35)); }
+.wordmark h1 { font: 650 clamp(2.4rem, 5vw, 3.6rem)/1 var(--display); letter-spacing: -0.035em; margin: 0; }
+.lede { max-width: 56ch; color: var(--page-soft); margin: 14px 0 0; font-size: 1.05rem; }
+.meta { color: var(--page-soft); font-size: 13px; text-align: right; line-height: 1.7; }
+
+section { padding: 44px 0; border-top: 1px solid color-mix(in oklch, var(--page-ink) 9%, transparent); }
+section > .wrap > h2 { font: 650 1.6rem/1.15 var(--display); letter-spacing: -0.02em; margin: 0 0 8px; }
+.sub { color: var(--page-soft); max-width: 68ch; margin: 0 0 24px; }
+
+/* ── Stage: a mock desktop ─────────────────────────── */
+.stage {
+  position: relative; height: 600px; border-radius: 20px; overflow: hidden;
+  background: radial-gradient(120% 90% at 20% 10%, #dfe3ea, #c4cad6 60%, #aeb6c5);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
+}
+.stage.dark { background: radial-gradient(120% 90% at 20% 10%, #2b2f37, #1b1e24 60%, #121418); }
+.win {
+  position: absolute; left: 6%; top: 8%; width: 54%; height: 66%;
+  background: #f7f8fa; border-radius: 12px; box-shadow: 0 20px 50px -20px rgba(20,25,40,.35), 0 0 0 1px rgba(20,25,40,.06);
+  padding: 44px 32px; display: grid; align-content: start; gap: 13px;
+}
+.stage.dark .win { background: #23262d; box-shadow: 0 20px 50px -20px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.05); }
+.win i { display: block; height: 9px; border-radius: 5px; background: #e3e6ec; }
+.stage.dark .win i { background: #31353e; }
+.win i:nth-child(3n) { width: 72%; } .win i:nth-child(4n) { width: 48%; } .win i:nth-child(5n+1) { width: 86%; }
+.desk-toggle {
+  position: absolute; left: 16px; top: 14px; z-index: 5;
+  font: 600 12px var(--ui); color: #2b2f37; background: rgba(255,255,255,.7); border: 0; border-radius: 99px; padding: 7px 12px; cursor: pointer;
+}
+.stage.dark .desk-toggle { color: #e8eaf0; background: rgba(255,255,255,.1); }
+
+/* ── Overlay material ──────────────────────────────── */
+.ov {
+  position: absolute; color: var(--ink); border-radius: var(--r-ov); overflow: hidden; isolation: isolate;
+  box-shadow: 0 18px 40px -14px rgba(10,6,16,.55), 0 3px 8px -2px rgba(10,6,16,.25);
+  font-family: var(--ui);
+}
+.ov::before { /* the record's own colours, blurred */
+  content: ""; position: absolute; inset: -40px; z-index: -2;
+  background: var(--art) center / cover; filter: blur(26px) saturate(1.3);
+}
+.ov::after { /* palette scrim keeps text legible on any cover */
+  content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit;
+  background: color-mix(in oklch, var(--base) 80%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in oklch, var(--ink) 14%, transparent), inset 0 0 0 1px color-mix(in oklch, var(--ink) 6%, transparent);
+}
+.art { background: var(--cover) center / cover; flex: none; box-shadow: 0 4px 10px -3px rgba(0,0,0,.4); }
+.tnum { font-variant-numeric: tabular-nums; }
+.btn {
+  appearance: none; border: 0; background: transparent; color: var(--ink); cursor: pointer;
+  width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; padding: 0;
+  transition: background 160ms;
+}
+.btn:hover { background: color-mix(in oklch, var(--ink) 12%, transparent); }
+.btn:active { transform: scale(.94); }
+.btn svg { width: 16px; height: 16px; fill: currentColor; }
+.btn.big svg { width: 18px; height: 18px; }
+
+/* Card: the player */
+.card { right: 4%; top: 7%; width: 320px; padding: 12px; }
+.card .row { display: flex; gap: 12px; align-items: center; }
+.card .art { width: 64px; height: 64px; border-radius: 10px; }
+.card .t { min-width: 0; flex: 1; }
+.card .title { font-weight: 650; font-size: 15px; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card .artist { color: var(--ink-soft); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card .ctl { display: flex; gap: 2px; margin-right: -4px; }
+.prog { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 11px; color: var(--ink-soft); }
+.bar { flex: 1; height: 4px; border-radius: 4px; background: color-mix(in oklch, var(--ink) 16%, transparent); overflow: hidden; }
+.fill { height: 100%; width: 100%; border-radius: inherit; background: var(--accent); transform-origin: left; transform: scaleX(0); }
+
+/* Pill: the collapsed mode, lyric-first */
+.pill {
+  left: 6%; bottom: 7%;
+  height: 48px; width: 400px; border-radius: 14px; padding: 6px;
+  display: flex; align-items: center; gap: 10px;
+}
+.pill .art { width: 36px; height: 36px; border-radius: 8px; }
+.pill .line { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity 220ms; }
+.pill .line.swap { opacity: 0; }
+.pill .ctl { display: flex; gap: 0; flex: none; }
+.pill .hair { position: absolute; left: 52px; right: 12px; bottom: 5px; height: 2px; border-radius: 2px; background: color-mix(in oklch, var(--ink) 12%, transparent); overflow: hidden; }
+
+/* Lyrics panel */
+.lyr { right: 4%; bottom: 7%; width: 360px; padding: 12px 16px 12px; }
+.lyr .win3 { height: 96px; overflow: hidden; position: relative; --ft: 0; --fb: 0;
+  -webkit-mask-image: linear-gradient(rgba(0,0,0,var(--ft)), #000 30%, #000 70%, rgba(0,0,0,var(--fb)));
+          mask-image: linear-gradient(rgba(0,0,0,var(--ft)), #000 30%, #000 70%, rgba(0,0,0,var(--fb))); }
+.lyr .win3.at-top { --ft: 1; } .lyr .win3.at-bot { --fb: 1; }
+.lyr .col { transition: transform var(--dur-lyric) var(--spring-lyric); }
+.lyr .l { height: 32px; line-height: 32px; display: block; font-size: 17px; font-weight: 650; letter-spacing: -0.01em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink-faint); transform: scale(.8); transform-origin: left center;
+  transition: transform var(--dur-lyric) var(--spring-lyric), color 300ms; }
+.lyr .l.now { color: var(--ink); transform: scale(1); }
+.lyr .l.gap { display: flex; align-items: center; gap: 5px; }
+.lyr .l.gap b { width: 6px; height: 6px; border-radius: 3px; background: currentColor; animation: breathe 1.6s ease-in-out infinite; }
+.lyr .l.gap b:nth-child(2) { animation-delay: .2s; } .lyr .l.gap b:nth-child(3) { animation-delay: .4s; }
+@keyframes breathe { 50% { opacity: .35; transform: scale(.7); } }
+.lyr .foot { display: flex; align-items: center; gap: 10px; margin-top: 10px; padding-top: 10px;
+  border-top: 1px solid color-mix(in oklch, var(--ink) 10%, transparent); }
+.lyr .foot .art { width: 34px; height: 34px; border-radius: 7px; }
+.lyr .fm { min-width: 0; flex: 1; line-height: 1.3; }
+.lyr .fm div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lyr .ft { font-size: 13px; font-weight: 650; color: var(--ink); }
+.lyr .fa { font-size: 12px; color: var(--ink-soft); }
+.lyr .ctl { display: flex; flex: none; margin-right: -4px; }
+.lyr .ctl .btn { width: 28px; height: 28px; border-radius: 8px; }
+.lyr .ctl .btn svg { width: 14px; height: 14px; }
+
+/* Tuck tab */
+.tuck { right: 0; top: 46%; width: 10px; height: 72px; border-radius: 10px 0 0 10px; transition: width var(--dur-morph) var(--spring-morph); cursor: pointer; }
+.tuck::after { background: var(--accent); box-shadow: none; }
+.tuck .art { position: absolute; right: 8px; top: 12px; width: 48px; height: 48px; border-radius: 9px; opacity: 0; transition: opacity 200ms; }
+.tuck:hover { width: 64px; }
+.tuck:hover::after { background: color-mix(in oklch, var(--base) 82%, transparent); }
+.tuck:hover .art { opacity: 1; }
+
+.tag { position: absolute; font: 600 11px var(--ui); color: rgba(30,34,44,.62); letter-spacing: .01em; }
+.stage.dark .tag { color: rgba(230,232,240,.5); }
+
+/* ── Cover picker ──────────────────────────────────── */
+.picker { display: flex; gap: 12px; margin-top: 18px; flex-wrap: wrap; align-items: center; }
+.cv { appearance: none; border: 0; padding: 0; width: 64px; height: 64px; border-radius: 12px; cursor: pointer; overflow: hidden;
+  box-shadow: 0 0 0 2px transparent; transition: box-shadow 200ms, transform 200ms; background: #222; }
+.cv canvas, .cv img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.cv[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--page), 0 0 0 4px var(--accent); }
+.cv:hover { transform: translateY(-2px); }
+.drop { height: 64px; padding: 0 18px; border-radius: 12px; border: 1.5px dashed color-mix(in oklch, var(--page-ink) 28%, transparent);
+  display: grid; place-items: center; color: var(--page-soft); font-size: 13px; cursor: pointer; text-align: center; line-height: 1.3; }
+.drop:hover, .drop.over { border-color: var(--accent); color: var(--page-ink); }
+.drop input { position: absolute; opacity: 0; pointer-events: none; }
+.note { color: var(--page-soft); font-size: 12.5px; margin-top: 12px; }
+
+/* ── Palette readout ───────────────────────────────── */
+.pal { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.sw { border-radius: 14px; overflow: hidden; background: var(--page-2); }
+.sw .chip { height: 84px; display: flex; align-items: flex-end; padding: 10px 12px; font-size: 12px; font-weight: 600; }
+.sw .info { padding: 10px 12px 12px; font-size: 12.5px; color: var(--page-soft); }
+.sw .info b { display: block; color: var(--page-ink); font-weight: 600; font-size: 13px; }
+.clusters { display: flex; height: 18px; border-radius: 9px; overflow: hidden; margin-top: 16px; }
+.clusters span { display: block; height: 100%; transition: flex-grow 400ms; }
+.legend { display: flex; justify-content: space-between; font-size: 12px; color: var(--page-soft); margin-top: 8px; }
+
+/* ── Brand ─────────────────────────────────────────── */
+.names { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 16px; }
+.name { background: var(--page-2); border-radius: 18px; padding: 22px 22px 20px; }
+.name h3 { font: 650 2rem/1 var(--display); letter-spacing: -0.03em; margin: 0 0 10px; }
+.name.pick { background: color-mix(in oklch, var(--accent) 16%, var(--page-2)); box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--accent) 40%, transparent); }
+.name .rec { font-size: 12px; font-weight: 600; color: var(--accent); margin: -4px 0 10px; }
+.name p { margin: 0 0 10px; font-size: 14px; }
+.name .risk { color: var(--page-soft); font-size: 13px; margin: 0; }
+.ruled { color: var(--page-soft); font-size: 13px; margin-top: 16px; }
+
+.icons { display: grid; grid-template-columns: auto 1fr; gap: 40px; align-items: center; margin-top: 8px; }
+.icon-hero svg { width: 220px; height: 220px; display: block; filter: drop-shadow(0 22px 34px rgba(0,0,0,.45)); }
+.sizes { display: flex; gap: 28px; align-items: flex-end; flex-wrap: wrap; }
+.sizes figure { margin: 0; text-align: center; font-size: 12px; color: var(--page-soft); }
+.sizes svg { display: block; margin: 0 auto 8px; }
+.bars { display: grid; gap: 12px; margin-top: 26px; max-width: 520px; }
+.mbar { height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: flex-end; gap: 14px; padding: 0 14px; font-size: 12px; }
+.mbar.mac { background: #ececec; color: #1d1d1f; }
+.mbar.winbar { background: #202020; color: #f3f3f3; justify-content: flex-end; }
+.mbar img, .mbar svg { width: 16px; height: 16px; display: block; }
+.mbar .lbl { margin-right: auto; opacity: .75; }
+
+footer { padding-top: 40px; padding-bottom: 70px; color: var(--page-soft); font-size: 13px; }
+
+@media (max-width: 900px) {
+  header.top { grid-template-columns: 1fr; }
+  .meta { text-align: left; }
+  .stage { height: auto; padding: 20px 16px 24px; display: grid; gap: 16px; justify-items: center; }
+  .stage .win, .stage .tag { display: none; }
+  .ov { position: relative; inset: auto; transform: none; max-width: 100%; }
+  .pill { left: auto; bottom: auto; }
+  .tuck { align-self: end; justify-self: end; margin-right: -16px; }
+  .desk-toggle { position: relative; left: auto; bottom: auto; }
+  .pal { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .names { grid-template-columns: 1fr; }
+  .icons { grid-template-columns: 1fr; }
+}
+@media (max-width: 420px) { .wrap { padding: 0 16px; } .card, .lyr, .pill { width: 100%; } }
+</style>
+</head>
+<body>
+
+<header class="wrap top">
+  <div>
+    <div class="wordmark"><span id="mark-sm"></span><h1>overtone</h1></div>
+    <p class="lede">A tray app that floats a small now-playing overlay over whatever you're doing, takes its colours from the record, and sings along in synced lyrics. It works with any player your OS can see.</p>
+  </div>
+  <div class="meta">Concept board · working name<br><a href="../docs/ARCHITECTURE.md">Architecture</a> · <a href="../PRODUCT.md">Product</a></div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>Three sizes of the same overlay</h2>
+    <p class="sub">The pill sits low with the current lyric and its controls. The card is the full player, the lyric panel scrolls line by line, and the tab is the overlay tucked into the screen edge. None of them change size under your pointer. Pick a cover below, or drop in your own, to see the palette engine recolour all of it.</p>
+
+    <div class="stage" id="stage">
+      <div class="win" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+
+      <div class="ov card" aria-label="Player">
+        <div class="row">
+          <div class="art"></div>
+          <div class="t"><div class="title" data-title></div><div class="artist" data-artist></div></div>
+          <div class="ctl">
+            <button class="btn" data-prev aria-label="Previous track"><svg viewBox="0 0 16 16"><path d="M3 2.5h1.6v11H3zM14 2.9v10.2a.6.6 0 0 1-.92.5L6 8.5a.6.6 0 0 1 0-1l7.08-5.1a.6.6 0 0 1 .92.5z"/></svg></button>
+            <button class="btn big" data-play aria-label="Pause"><svg viewBox="0 0 16 16"><use href="#i-pause"/></svg></button>
+            <button class="btn" data-next aria-label="Next track"><svg viewBox="0 0 16 16"><path d="M11.4 2.5H13v11h-1.6zM2 2.9v10.2a.6.6 0 0 0 .92.5L10 8.5a.6.6 0 0 0 0-1L2.92 2.4a.6.6 0 0 0-.92.5z"/></svg></button>
+          </div>
+        </div>
+        <div class="prog tnum"><span data-pos>0:00</span><div class="bar"><div class="fill"></div></div><span data-dur>0:00</span></div>
+      </div>
+
+      <div class="ov lyr" aria-label="Lyrics" aria-live="polite">
+        <div class="win3"><div class="col" data-col></div></div>
+        <div class="foot"><div class="art"></div><div class="fm"><div class="ft" data-title></div><div class="fa" data-artist></div></div>
+          <div class="ctl"><button class="btn" data-prev aria-label="Previous track"><svg viewBox="0 0 16 16"><path d="M3 2.5h1.6v11H3zM14 2.9v10.2a.6.6 0 0 1-.92.5L6 8.5a.6.6 0 0 1 0-1l7.08-5.1a.6.6 0 0 1 .92.5z"/></svg></button><button class="btn" data-play aria-label="Pause"><svg viewBox="0 0 16 16"><use href="#i-pause"/></svg></button><button class="btn" data-next aria-label="Next track"><svg viewBox="0 0 16 16"><path d="M11.4 2.5H13v11h-1.6zM2 2.9v10.2a.6.6 0 0 0 .92.5L10 8.5a.6.6 0 0 0 0-1L2.92 2.4a.6.6 0 0 0-.92.5z"/></svg></button></div></div>
+      </div>
+
+      <div class="ov pill" aria-label="Compact player">
+        <div class="art"></div>
+        <div class="line" data-line></div>
+        <div class="ctl">
+          <button class="btn" data-prev aria-label="Previous track"><svg viewBox="0 0 16 16"><path d="M3 2.5h1.6v11H3zM14 2.9v10.2a.6.6 0 0 1-.92.5L6 8.5a.6.6 0 0 1 0-1l7.08-5.1a.6.6 0 0 1 .92.5z"/></svg></button>
+          <button class="btn" data-play aria-label="Pause"><svg viewBox="0 0 16 16"><use href="#i-pause"/></svg></button>
+          <button class="btn" data-next aria-label="Next track"><svg viewBox="0 0 16 16"><path d="M11.4 2.5H13v11h-1.6zM2 2.9v10.2a.6.6 0 0 0 .92.5L10 8.5a.6.6 0 0 0 0-1L2.92 2.4a.6.6 0 0 0-.92.5z"/></svg></button>
+        </div>
+        <div class="hair"><div class="fill"></div></div>
+      </div>
+
+      <div class="ov tuck" aria-label="Tucked overlay"><div class="art"></div></div>
+
+      <span class="tag" style="right:calc(4% + 4px); top:calc(7% + 128px)">Card</span>
+      <span class="tag" style="left:calc(6% + 4px); bottom:calc(7% + 56px)">Pill</span>
+      <span class="tag" style="right:22px; top:calc(46% + 80px)">Tucked tab</span>
+      <button class="desk-toggle" id="deskToggle">Dark desktop</button>
+    </div>
+
+    <div class="picker" id="picker" role="group" aria-label="Choose a cover">
+      <label class="drop" id="drop">Drop a cover<br>or click to choose<input type="file" accept="image/*" id="file"></label>
+    </div>
+    <p class="note">Covers, titles and lyrics here are synthetic, made for this demo. Your own image never leaves the page.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>What the palette engine pulled</h2>
+    <p class="sub">The cover is downsampled to 64×64 and clustered in OKLab. Then roles are assigned: <b>base</b> fills the card, <b>accent</b> drives progress and the current lyric, and the three inks are solved for contrast against the base by moving only their lightness, so text stays readable on any cover. This page uses the same palette.</p>
+    <div class="pal" id="pal"></div>
+    <div class="clusters" id="clusters" aria-hidden="true"></div>
+    <div class="legend"><span>Clusters by share of the cover</span><span id="tone"></span></div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>A name</h2>
+    <p class="sub">The name should be ownable, short in a menu bar, free of any platform's name, and say something about either the floating or the colour mechanism.</p>
+    <div class="names">
+      <article class="name pick">
+        <h3>Overtone</h3>
+        <p class="rec">Recommended</p>
+        <p>An overtone is the higher note that rings above the one being played. The app sits <em>over</em> your work and takes its <em>tone</em> from the record. The mark draws the harmonic series as three lyric lines.</p>
+        <p class="risk">Risk: an old open-source Clojure audio library and a few unrelated companies use the word. Run a trademark and app-store search before committing.</p>
+      </article>
+      <article class="name">
+        <h3>Inlay</h3>
+        <p>The printed card inside a CD or cassette case, where the lyrics lived, made in the album's colours. Small and rectangular, like the overlay.</p>
+        <p class="risk">Risk: reads as dental or woodwork without context, and it says nothing about floating.</p>
+      </article>
+      <article class="name">
+        <h3>Lull</h3>
+        <p>A soft pause. It names the feeling of the app: calm, weightless, never asking for attention.</p>
+        <p class="risk">Risk: says nothing about music or lyrics, and the word is crowded among sleep apps.</p>
+      </article>
+    </div>
+    <p class="ruled">Ruled out: <b>Sleeve</b> (an existing macOS now-playing app), <b>Lilt</b> (an AI translation company), and Halo, Aura and Drift (too crowded to own).</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>The icon</h2>
+    <p class="sub">The mark is the first three standing waves of a vibrating string, which is literally what an overtone is. They also read as three lyric lines, and each is drawn in a colour pulled from a record, so the mark shows the palette engine at work. The same three waves are the tray icon: in colour on Windows, and as a single-colour template on macOS, where the menu bar requires it.</p>
+    <div class="icons">
+      <div class="icon-hero" id="iconHero"></div>
+      <div>
+        <div class="sizes" id="sizes"></div>
+        <div class="bars">
+          <div class="mbar mac"><span class="lbl">macOS menu bar (template image)</span><span id="trayMac"></span><span>Sat 14 Nov 21:40</span></div>
+          <div class="mbar winbar"><span class="lbl">Windows tray</span><span id="trayWin"></span><span>21:40</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="wrap">Masters: <code>design/icon/overtone-app.svg</code>, <code>design/icon/overtone-tray.svg</code>, <code>overtone-tray-template.svg</code>, generated by <code>scripts/gen-icon.mjs</code>.</footer>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-pause" viewBox="0 0 16 16"><rect x="3.5" y="2.5" width="3" height="11" rx="1"/><rect x="9.5" y="2.5" width="3" height="11" rx="1"/></symbol>
+  <symbol id="i-play" viewBox="0 0 16 16"><path d="M4.5 2.6v10.8a.7.7 0 0 0 1.06.6l8.6-5.4a.7.7 0 0 0 0-1.2l-8.6-5.4a.7.7 0 0 0-1.06.6z"/></symbol>
+</svg>
+
+<script>
+/* ═════════ Colour maths: sRGB ⇄ OKLab, contrast ═════════ */
+const toLin = c => (c /= 255) <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+const toGam = c => 255 * (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055);
+function rgbToLab(r, g, b) {
+  r = toLin(r); g = toLin(g); b = toLin(b);
+  const l = Math.cbrt(0.4122214708*r + 0.5363325363*g + 0.0514459929*b);
+  const m = Math.cbrt(0.2119034982*r + 0.6806995451*g + 0.1073969566*b);
+  const s = Math.cbrt(0.0883024619*r + 0.2817188376*g + 0.6299787005*b);
+  return [0.2104542553*l + 0.7936177850*m - 0.0040720468*s,
+          1.9779984951*l - 2.4285922050*m + 0.4505937099*s,
+          0.0259040371*l + 0.7827717662*m - 0.8086757660*s];
+}
+function labToLinRgb(L, a, b) {
+  const l = (L + 0.3963377774*a + 0.2158037573*b) ** 3;
+  const m = (L - 0.1055613458*a - 0.0638541728*b) ** 3;
+  const s = (L - 0.0894841775*a - 1.2914855480*b) ** 3;
+  return [ 4.0767416621*l - 3.3077115913*m + 0.2309699292*s,
+          -1.2684380046*l + 2.6097574011*m - 0.3413193965*s,
+          -0.0041960863*l - 0.7034186147*m + 1.7076147010*s];
+}
+const lch = (L, C, H) => ({ L, C, H });
+const labOf = ({ L, C, H }) => [L, C * Math.cos(H), C * Math.sin(H)];
+const lchOfLab = ([L, a, b]) => ({ L, C: Math.hypot(a, b), H: Math.atan2(b, a) });
+/** OKLCH → in-gamut sRGB by lowering chroma only. */
+function toRgb(c) {
+  let C = c.C;
+  for (let i = 0; i < 24; i++) {
+    const lin = labToLinRgb(...labOf({ L: c.L, C, H: c.H }));
+    if (lin.every(v => v >= -1e-4 && v <= 1.0001)) return lin.map(v => Math.round(toGam(Math.min(1, Math.max(0, v)))));
+    C *= 0.86;
+  }
+  const lin = labToLinRgb(c.L, 0, 0);
+  return lin.map(v => Math.round(toGam(Math.min(1, Math.max(0, v)))));
+}
+const hex = rgb => "#" + rgb.map(v => v.toString(16).padStart(2, "0")).join("");
+const lum = rgb => { const [r, g, b] = rgb.map(toLin); return 0.2126*r + 0.7152*g + 0.0722*b; };
+const contrast = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+const hueDiff = (a, b) => { let d = Math.abs(a - b) % (2*Math.PI); return d > Math.PI ? 2*Math.PI - d : d; };
+
+/* ═════════ Palette engine (mirrors core/palette) ═════════ */
+function extractPalette(img) {
+  const c = document.createElement("canvas"); c.width = c.height = 64;
+  const x = c.getContext("2d", { willReadFrequently: true });
+  x.drawImage(img, 0, 0, 64, 64);
+  const d = x.getImageData(0, 0, 64, 64).data;
+  const px = [];
+  for (let i = 0; i < d.length; i += 4) if (d[i+3] > 200) px.push(rgbToLab(d[i], d[i+1], d[i+2]));
+
+  // Deterministic seeds: lightness quantiles.
+  const K = 6, sorted = [...px].sort((p, q) => p[0] - q[0]);
+  let cent = Array.from({ length: K }, (_, k) => sorted[Math.floor((k + 0.5) / K * sorted.length)].slice());
+  let assign = new Int32Array(px.length);
+  for (let it = 0; it < 12; it++) {
+    const sum = cent.map(() => [0, 0, 0, 0]);
+    px.forEach((p, i) => {
+      let best = 0, bd = Infinity;
+      cent.forEach((q, k) => { const dd = (p[0]-q[0])**2 + (p[1]-q[1])**2 + (p[2]-q[2])**2; if (dd < bd) { bd = dd; best = k; } });
+      assign[i] = best; const s = sum[best]; s[0] += p[0]; s[1] += p[1]; s[2] += p[2]; s[3]++;
+    });
+    cent = cent.map((q, k) => sum[k][3] ? [sum[k][0]/sum[k][3], sum[k][1]/sum[k][3], sum[k][2]/sum[k][3]] : q);
+  }
+  const counts = new Array(K).fill(0); assign.forEach(a => counts[a]++);
+  let clusters = cent.map((lab, k) => ({ lab, share: counts[k] / px.length, ...lchOfLab(lab) }))
+                     .filter(cl => cl.share >= 0.03).sort((a, b) => b.share - a.share);
+
+  const meanL = px.reduce((s, p) => s + p[0], 0) / px.length;
+  const meanC = px.reduce((s, p) => s + Math.hypot(p[1], p[2]), 0) / px.length;
+  const tone = meanL > 0.72 && meanC < 0.07 ? "light" : "dark";
+
+  // base: dominant, nudged toward colourful clusters.
+  const baseCl = clusters.reduce((b, cl) => (cl.share * (0.6 + cl.C * 3) > b.share * (0.6 + b.C * 3) ? cl : b));
+  const baseC = Math.min(baseCl.C, tone === "dark" ? 0.09 : 0.05);
+  const base = tone === "dark" ? lch(Math.min(0.28, Math.max(0.2, baseCl.L * 0.5)), baseC, baseCl.H)
+                               : lch(0.93, Math.min(baseC, 0.035), baseCl.H);
+
+  // accent: most chromatic cluster with a distinct hue, else a saturated shift of base.
+  const cands = clusters.filter(cl => cl.C > 0.045 && (hueDiff(cl.H, baseCl.H) > 0.44 || cl.C > baseCl.C * 1.6));
+  const accCl = cands.sort((a, b) => b.C * b.share ** 0.3 - a.C * a.share ** 0.3)[0];
+  let acc = accCl ? lch(accCl.L, Math.max(accCl.C, 0.12), accCl.H) : lch(0.7, 0.14, baseCl.H);
+  acc.L = tone === "dark" ? Math.max(acc.L, 0.72) : Math.min(acc.L, 0.5);
+
+  const baseRgb = toRgb(base);
+  // inks: hue of base, low chroma; walk lightness until each contrast target is met.
+  const solve = (target, startL, chroma) => {
+    const dir = tone === "dark" ? 1 : -1; let L = startL, rgb;
+    for (let i = 0; i < 80; i++) { rgb = toRgb(lch(L, chroma, base.H)); if (contrast(rgb, baseRgb) >= target) break; L += dir * 0.01; L = Math.min(1, Math.max(0, L)); }
+    return { rgb, ratio: contrast(rgb, baseRgb) };
+  };
+  const ink   = solve(7,   tone === "dark" ? 0.9 : 0.3, 0.02);
+  const soft  = solve(4.5, tone === "dark" ? 0.7 : 0.5, 0.04);
+  const faint = solve(3,   tone === "dark" ? 0.55 : 0.62, 0.05);
+  const accRgb = toRgb(acc);
+
+  // Page colours (this concept board), always dark, in the base's hue.
+  const page = toRgb(lch(0.17, Math.min(baseCl.C, 0.035), baseCl.H));
+  const page2 = toRgb(lch(0.22, Math.min(baseCl.C, 0.04), baseCl.H));
+  const pageInk = toRgb(lch(0.95, 0.012, baseCl.H));
+  const pageSoft = toRgb(lch(0.76, 0.03, baseCl.H));
+  // On a light card the accent must also read on the dark page.
+  const accPage = tone === "light" ? toRgb(lch(Math.max(acc.L, 0.74), acc.C, acc.H)) : accRgb;
+
+  return { tone, clusters: clusters.map(cl => ({ share: cl.share, rgb: toRgb(cl) })),
+    base: baseRgb, accent: accRgb, accentPage: accPage, ink, soft, faint,
+    accentRatio: contrast(accRgb, baseRgb), page, page2, pageInk, pageSoft };
+}
+
+/* ═════════ Springs → CSS linear() ═════════ */
+function springEasing(response, damping) {
+  const w = 2 * Math.PI / response, z = damping, wd = w * Math.sqrt(1 - z*z);
+  let T = 0; // settle time
+  for (let t = 0; t < 4; t += 0.005) { const e = Math.exp(-z*w*t); if (e < 0.001) { T = t; break; } }
+  T = T || 2;
+  const pts = [];
+  for (let i = 0; i <= 48; i++) { const t = T * i / 48; pts.push((1 - Math.exp(-z*w*t) * (Math.cos(wd*t) + z*w/wd*Math.sin(wd*t))).toFixed(4)); }
+  return { easing: `linear(${pts.join(",")})`, ms: Math.round(T * 1000) };
+}
+if (CSS.supports("transition-timing-function", "linear(0, 1)") && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  const root = document.documentElement.style;
+  const m = springEasing(0.42, 0.78), l = springEasing(0.5, 0.86);
+  root.setProperty("--spring-morph", m.easing); root.setProperty("--dur-morph", m.ms + "ms");
+  root.setProperty("--spring-lyric", l.easing); root.setProperty("--dur-lyric", l.ms + "ms");
+}
+
+/* ═════════ Synthetic covers + tracks ═════════ */
+function cover(draw) { const c = document.createElement("canvas"); c.width = c.height = 300; draw(c.getContext("2d")); return c; }
+let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+function grain(x, a) { const d = x.getImageData(0,0,300,300); for (let i = 0; i < d.data.length; i += 4) { const n = (rnd() - .5) * a; d.data[i] += n; d.data[i+1] += n; d.data[i+2] += n; } x.putImageData(d, 0, 0); }
+const covers = [
+  cover(x => { // dusk: violet sky, coral sun, lanterns
+    const g = x.createLinearGradient(0,0,0,300); g.addColorStop(0,"#2b1650"); g.addColorStop(.6,"#8a2f7a"); g.addColorStop(1,"#e0566b"); x.fillStyle = g; x.fillRect(0,0,300,300);
+    x.fillStyle = "#ff9a62"; x.beginPath(); x.arc(196,188,70,0,7); x.fill();
+    x.fillStyle = "#1b0d2c"; x.fillRect(0,236,300,64);
+    [[48,70],[92,112],[60,150],[120,60],[250,88]].forEach(([a,b]) => { x.fillStyle = "#ffd27a"; x.beginPath(); x.ellipse(a,b,7,10,0,0,7); x.fill(); });
+    grain(x, 18);
+  }),
+  cover(x => { // pale field: light-tone test
+    x.fillStyle = "#f3efe6"; x.fillRect(0,0,300,300);
+    x.fillStyle = "#e4ecef"; x.fillRect(0,0,300,170);
+    x.fillStyle = "#6f8f5a"; x.fillRect(0,170,300,6);
+    x.fillStyle = "#b8463a"; x.beginPath(); x.arc(226,120,14,0,7); x.fill();
+    x.fillStyle = "#2f3a2a"; x.font = "600 22px Georgia, serif"; x.fillText("fieldwork", 28, 248);
+    grain(x, 10);
+  }),
+  cover(x => { // neon: black ground, cyan/pink bands
+    x.fillStyle = "#0b0b12"; x.fillRect(0,0,300,300);
+    ["#19e3d6","#ff3fa4","#6a5cff"].forEach((col, i) => { x.fillStyle = col; x.fillRect(30 + i*22, 40, 12, 220); });
+    x.strokeStyle = "#ff3fa4"; x.lineWidth = 4; x.strokeRect(150, 90, 110, 110);
+    grain(x, 14);
+  }),
+  cover(x => { // ember: deep red, orange glow
+    const g = x.createRadialGradient(110,200,10,110,200,260); g.addColorStop(0,"#ffb347"); g.addColorStop(.35,"#e2552b"); g.addColorStop(.75,"#6e1418"); g.addColorStop(1,"#2a0709"); x.fillStyle = g; x.fillRect(0,0,300,300);
+    x.fillStyle = "rgba(255,230,190,.85)"; for (let i = 0; i < 40; i++) { x.beginPath(); x.arc(rnd()*300, rnd()*180, rnd()*2+.5, 0, 7); x.fill(); }
+    grain(x, 22);
+  }),
+];
+const L = (...lines) => lines;
+const tracks = [
+  { title: "Paper Lanterns", artist: "Sola Vey", lines: L("We let the lanterns go at nine", "and watched them thread the violet line", "", "you said the sky was running late", "so we stayed out to help it wait", "the river kept our names in light", "a little louder every night", "paper lanterns, carry us home", "paper lanterns, carry us home", "", "and if the morning comes too soon", "we'll fold it up and keep the moon") },
+  { title: "Fieldwork", artist: "The Quiet Acres", lines: L("Mud on the cuffs and the radio on", "counting the rows till the light is gone", "red kite circling the eastern rise", "I keep a map behind my eyes", "", "slow hands, slow hands", "the year is long", "slow hands, slow hands", "and so's the song", "fence posts leaning into June", "we'll fix them later, later soon", "mud on the cuffs and the radio on") },
+  { title: "Neon Thaw", artist: "Kite Motel", lines: L("Ice in the gutter turning pink", "city's louder than you think", "", "", "flicker, flicker, hold the frame", "every sign is spelling your name", "cyan on the windshield, two a.m.", "I'd do it all over again", "neon thaw, neon thaw", "melt me down to what I was", "", "flicker, flicker, hold the frame") },
+  { title: "Ember Hours", artist: "Ondine Park", lines: L("Sparks go up and they don't come down", "the last ones left in a sleeping town", "warm your hands on the things we said", "the night is gold and the coals are red", "", "ember hours", "keep me awake", "ember hours", "for old times' sake", "smoke in your hair like a borrowed song", "stay a little, it won't be long", "sparks go up and they don't come down") },
+];
+const LINE_S = 3.5;
+tracks.forEach((t, i) => { t.cover = covers[i]; t.duration = t.lines.length * LINE_S; });
+
+/* ═════════ State + clock (mirrors core/clock) ═════════ */
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+let cur = 0, playing = true, pos0 = 0, at0 = performance.now(), lineTimer = 0, endTimer = 0, lastLine = -1;
+const position = () => Math.min(tracks[cur].duration, playing ? pos0 + (performance.now() - at0) / 1000 : pos0);
+const fmt = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+
+function blurredArt(cv) { // once per track: tiny, cheap, cached
+  const c = document.createElement("canvas"); c.width = c.height = 24; c.getContext("2d").drawImage(cv, 0, 0, 24, 24); return c.toDataURL();
+}
+function applyPalette(p) {
+  const r = document.documentElement.style, set = (k, rgb) => r.setProperty(k, hex(rgb));
+  set("--base", p.base); set("--accent", p.accent); set("--ink", p.ink.rgb); set("--ink-soft", p.soft.rgb); set("--ink-faint", p.faint.rgb);
+  set("--page", p.page); set("--page-2", p.page2); set("--page-ink", p.pageInk); set("--page-soft", p.pageSoft);
+  document.body.style.setProperty("--accent", hex(p.accentPage)); // page-level accent; overlays reset below
+  $$(".ov").forEach(o => o.style.setProperty("--accent", hex(p.accent)));
+  renderReadout(p);
+}
+
+function loadTrack(i) {
+  cur = (i + tracks.length) % tracks.length;
+  const t = tracks[cur];
+  if (!t.palette) t.palette = extractPalette(t.cover);
+  if (!t.coverURL) t.coverURL = t.cover.toDataURL ? t.cover.toDataURL() : t.cover.src;
+  if (!t.artURL) t.artURL = blurredArt(t.cover);
+  const st = $("#stage").style;
+  st.setProperty("--cover", `url(${t.coverURL})`); st.setProperty("--art", `url(${t.artURL})`);
+  applyPalette(t.palette);
+  $$("[data-title]").forEach(e => e.textContent = t.title);
+  $$("[data-artist]").forEach(e => e.textContent = t.artist);
+  $("[data-dur]").textContent = fmt(t.duration);
+  $("[data-col]").innerHTML = t.lines.map(l => l ? `<div class="l">${l}</div>` : `<div class="l gap" aria-label="Instrumental"><b></b><b></b><b></b></div>`).join("");
+  $$(".cv").forEach((b, k) => b.setAttribute("aria-pressed", String(k === cur)));
+  pos0 = 0; at0 = performance.now(); lastLine = -1;
+  sync();
+}
+
+/** Re-anchor everything on play / pause / seek / track change. */
+function sync() {
+  const t = tracks[cur], p = position();
+  clearTimeout(lineTimer); clearTimeout(endTimer);
+  // Progress: one compositor animation per anchor, not a frame loop.
+  $$(".fill").forEach(f => {
+    f.style.transition = "none"; f.style.transform = `scaleX(${p / t.duration})`; void f.offsetWidth;
+    if (playing) { f.style.transition = `transform ${t.duration - p}s linear`; f.style.transform = "scaleX(1)"; }
+  });
+  showLine(Math.min(t.lines.length - 1, Math.floor(p / LINE_S)));
+  if (playing) {
+    const next = (Math.floor(p / LINE_S) + 1) * LINE_S;
+    if (next < t.duration) lineTimer = setTimeout(sync, (next - p) * 1000 + 5);
+    else endTimer = setTimeout(() => loadTrack(cur + 1), (t.duration - p) * 1000);
+  }
+  $$("[data-play]").forEach(b => { b.setAttribute("aria-label", playing ? "Pause" : "Play"); b.querySelector("use").setAttribute("href", playing ? "#i-pause" : "#i-play"); });
+}
+function showLine(n) {
+  const t = tracks[cur];
+  if (n === lastLine) return; lastLine = n;
+  $$(".lyr .l").forEach((el, k) => el.classList.toggle("now", k === n));
+  // Pinned to the top for the first line, centred after that, pinned to the bottom for the last.
+  const off = Math.max(0, Math.min(n - 1, t.lines.length - 3));
+  $("[data-col]").style.transform = `translateY(${-off * 32}px)`;
+  const w = $(".lyr .win3"); w.classList.toggle("at-top", off === 0); w.classList.toggle("at-bot", off === t.lines.length - 3);
+  const pill = $("[data-line]"), text = t.lines[n] || `${t.title} · ${t.artist}`;
+  pill.classList.add("swap");
+  setTimeout(() => { pill.textContent = text; pill.classList.remove("swap"); }, 200);
+}
+setInterval(() => { $("[data-pos]").textContent = fmt(position()); }, 250); // text only
+
+$$("[data-play]").forEach(b => b.onclick = () => { pos0 = position(); at0 = performance.now(); playing = !playing; sync(); });
+$$("[data-next]").forEach(b => b.onclick = () => loadTrack(cur + 1));
+$$("[data-prev]").forEach(b => b.onclick = () => position() > 3 ? (pos0 = 0, at0 = performance.now(), lastLine = -1, sync()) : loadTrack(cur - 1));
+$("#deskToggle").onclick = e => { const d = $("#stage").classList.toggle("dark"); e.target.textContent = d ? "Light desktop" : "Dark desktop"; };
+
+/* ═════════ Picker + drop your own cover ═════════ */
+const picker = $("#picker"), drop = $("#drop");
+tracks.forEach((t, i) => {
+  const b = document.createElement("button"); b.className = "cv"; b.setAttribute("aria-label", `${t.title} by ${t.artist}`);
+  const c = document.createElement("canvas"); c.width = c.height = 128; c.getContext("2d").drawImage(t.cover, 0, 0, 128, 128);
+  b.append(c); b.onclick = () => loadTrack(i); picker.insertBefore(b, drop);
+});
+function useFile(file) {
+  if (!file || !file.type.startsWith("image/")) return;
+  const img = new Image();
+  img.onload = () => {
+    const c = document.createElement("canvas"); c.width = c.height = 300;
+    const s = Math.min(img.width, img.height); c.getContext("2d").drawImage(img, (img.width - s)/2, (img.height - s)/2, s, s, 0, 0, 300, 300);
+    URL.revokeObjectURL(img.src);
+    const t = { title: file.name.replace(/\.[^.]+$/, ""), artist: "Your cover", lines: tracks[0].lines, cover: c, duration: tracks[0].duration };
+    tracks.push(t);
+    const b = document.createElement("button"); b.className = "cv"; b.setAttribute("aria-label", t.title);
+    const th = document.createElement("canvas"); th.width = th.height = 128; th.getContext("2d").drawImage(c, 0, 0, 128, 128);
+    b.append(th); const idx = tracks.length - 1; b.onclick = () => loadTrack(idx); picker.insertBefore(b, drop);
+    loadTrack(idx);
+  };
+  img.src = URL.createObjectURL(file);
+}
+$("#file").onchange = e => useFile(e.target.files[0]);
+["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", e => useFile(e.dataTransfer.files[0]));
+
+/* ═════════ Readout ═════════ */
+function renderReadout(p) {
+  const sw = (name, rgb, bg, label, info) => `<div class="sw"><div class="chip" style="background:${hex(bg)};color:${hex(rgb)}">${label}</div><div class="info"><b>${name}</b>${info}</div></div>`;
+  const r = v => v.toFixed(1) + ":1";
+  $("#pal").innerHTML =
+    sw("base", p.ink.rgb, p.base, hex(p.base), "card fill") +
+    sw("accent", p.base, p.accent, hex(p.accent), `progress, glow · ${r(p.accentRatio)} on base`) +
+    sw("ink", p.ink.rgb, p.base, "Track title", `titles, current lyric · ${r(p.ink.ratio)}`) +
+    sw("ink soft", p.soft.rgb, p.base, "Artist name · 1:24", `artist, times · ${r(p.soft.ratio)}`) +
+    sw("ink faint", p.faint.rgb, p.base, "next lyric line", `context lines, large · ${r(p.faint.ratio)}`);
+  $("#clusters").innerHTML = p.clusters.map(c => `<span style="flex-grow:${c.share};background:${hex(c.rgb)}"></span>`).join("");
+  $("#tone").textContent = p.tone === "light" ? "Pale cover, so a light card" : "Dark card";
+}
+
+/* ═════════ Icon (same geometry as scripts/gen-icon.mjs) ═════════ */
+function wave(n, x0, x1, yc, amp, steps = 120) {
+  let d = ""; for (let i = 0; i <= steps; i++) { const t = i / steps; d += `${i ? "L" : "M"}${(x0 + (x1 - x0) * t).toFixed(1)} ${(yc - amp * Math.sin(n * Math.PI * t)).toFixed(1)}`; } return d;
+}
+// One mark everywhere: modes 1–3 of a string, each in a colour pulled from a record.
+const MARK = [ { n: 1, yc: 326, amp: 80, c: "#FF8A5C" }, { n: 2, yc: 526, amp: 64, c: "#FF4F8B" }, { n: 3, yc: 726, amp: 52, c: "#9671FF" } ];
+const markPaths = (sw, mono) => MARK.map((m, i) =>
+  `<path d="${wave(m.n, 176, 848, m.yc, m.amp)}" stroke="${mono || m.c}" stroke-width="${sw}"${mono ? ` stroke-opacity="${[1, .72, .48][i]}"` : ""}/>`).join("");
+let iconId = 0;
+function appIcon(size) {
+  const k = "i" + (iconId++);
+  return `<svg viewBox="0 0 1024 1024" width="${size}" height="${size}" role="img" aria-label="Overtone icon"><defs>
+    <radialGradient id="${k}a" cx=".2" cy=".08" r=".8"><stop offset="0" stop-color="#3A1C3E"/><stop offset="1" stop-color="#3A1C3E" stop-opacity="0"/></radialGradient>
+    <linearGradient id="${k}s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".10"/><stop offset=".4" stop-color="#fff" stop-opacity="0"/></linearGradient>
+    <clipPath id="${k}t"><rect width="1024" height="1024" rx="232"/></clipPath></defs>
+    <g clip-path="url(#${k}t)"><rect width="1024" height="1024" fill="#120A19"/><rect width="1024" height="1024" fill="url(#${k}a)"/>
+    <g fill="none" stroke-linecap="round" stroke-linejoin="round">${markPaths(size <= 32 ? 84 : 72)}</g>
+    <rect width="1024" height="1024" fill="url(#${k}s)"/></g></svg>`;
+}
+/** Tray glyph: the identical mark, cropped tight, strokes thickened for 16 px. */
+function trayGlyph(size, mono) {
+  return `<svg viewBox="132 132 760 760" width="${size}" height="${size}" aria-hidden="true"><g fill="none" stroke-linecap="round" stroke-linejoin="round">${markPaths(92, mono)}</g></svg>`;
+}
+$("#mark-sm").innerHTML = appIcon(56);
+$("#iconHero").innerHTML = appIcon(220);
+$("#sizes").innerHTML = [128, 64, 32, 16].map(s => `<figure>${appIcon(s)}${s} px</figure>`).join("");
+$("#trayMac").innerHTML = trayGlyph(16, "#1d1d1f");
+$("#trayWin").innerHTML = trayGlyph(16);
+
+loadTrack(Math.max(0, Math.min(tracks.length - 1, parseInt(location.hash.slice(1), 10) || 0)));
+</script>
+</body>
+</html>

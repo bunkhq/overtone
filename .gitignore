@@ -1,0 +1,16 @@
+# Rust
+/core/target/
+# .NET
+bin/
+obj/
+*.user
+.vs/
+# Xcode
+xcuserdata/
+DerivedData/
+*.xcframework/
+# Local review captures
+/.impeccable/review/
+# OS
+.DS_Store
+Thumbs.db
