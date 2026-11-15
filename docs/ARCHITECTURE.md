@@ -143,8 +143,8 @@ Golden tests: a folder of sample covers with their expected palettes, so changes
 
 ## 10. Build order
 
-1. **Core skeleton**: palette + LRC parser + clock, with tests. No UI.
-2. **Windows source spike**: console app printing SMTC events from Spotify, a browser tab and Apple Music. This proves the "any platform" claim on day one.
+1. ~~**Core skeleton**: palette + LRC parser + clock, with tests. No UI.~~ Done: `core/` (palette, LRC, clock, matcher, LRCLIB provider; 33 tests). Still to add: SQLite cache, UniFFI exports.
+2. ~~**Windows source spike**~~ Done: `apps/windows/tools/SmtcProbe` prints every SMTC session and streams changes (`dotnet run`). Verified with Spotify; the rest of `docs/COMPATIBILITY.md` gets ticked off as tested.
 3. **macOS source spike**: the same with `mediaremote-adapter`, on the newest macOS available.
 4. **One overlay, one OS**: compact pill + card + lyric line, palette-driven, drag and snap. Whichever OS you use day to day goes first.
 5. Tray menu, settings, launch at login, ghost mode, tuck.
