@@ -10,9 +10,13 @@
 //! - [`clock`]: playback position interpolation between OS updates.
 //! - [`matcher`]: track-name normalisation for lyrics lookups.
 //! - [`lyrics`]: lyrics providers (LRCLIB), behind the `net` feature.
+//! - [`ffi`]: the C ABI the shells call.
 
+#[cfg(feature = "net")]
+pub mod artwork;
 pub mod clock;
 pub mod color;
+pub mod ffi;
 pub mod lrc;
 #[cfg(feature = "net")]
 pub mod lyrics;

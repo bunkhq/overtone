@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Application
+    x:Class="Overtone.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+      No XamlControlsResources: the overlay only uses primitives and one templated
+      Button, so the Fluent control dictionary would cost memory for nothing.
+
+      The brushes below are the live palette. PaletteTheme mutates their colours on
+      every track change, and everything bound with StaticResource follows.
+    -->
+    <Application.Resources>
+        <SolidColorBrush x:Key="BaseBrush" Color="#2A1838" />
+        <SolidColorBrush x:Key="ScrimBrush" Color="#CC2A1838" />
+        <SolidColorBrush x:Key="AccentBrush" Color="#FF8A5C" />
+        <SolidColorBrush x:Key="InkBrush" Color="#FFF7F2" />
+        <!-- Track titles: the ink on a dark card; the accent on a light card when it reads, as on a pale record sleeve. -->
+        <SolidColorBrush x:Key="TitleBrush" Color="#FFF7F2" />
+        <SolidColorBrush x:Key="InkSoftBrush" Color="#D9C8D8" />
+        <SolidColorBrush x:Key="InkFaintBrush" Color="#A893A8" />
+        <SolidColorBrush x:Key="TrackBrush" Color="#29FFF7F2" />
+        <SolidColorBrush x:Key="HoverBrush" Color="#1FFFF7F2" />
+        <SolidColorBrush x:Key="PressedBrush" Color="#33FFF7F2" />
+        <SolidColorBrush x:Key="RimBrush" Color="#14FFF7F2" />
+        <SolidColorBrush x:Key="PlaceholderBrush" Color="#1AFFF7F2" />
+        <ImageBrush x:Key="ArtBrush" Stretch="UniformToFill" />
+        <LinearGradientBrush x:Key="TintBrush" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Offset="0" Color="#3A2244" />
+            <GradientStop Offset="0.7" Color="#2A1838" />
+        </LinearGradientBrush>
+
+        <!-- The cursor-following shine on hovered transport buttons (GlowButton moves Center). -->
+        <Color x:Key="ShineCore">#38FFFFFF</Color>
+
+        <FontFamily x:Key="UiFont">Segoe UI Variable Text, Segoe UI</FontFamily>
+        <FontFamily x:Key="DisplayFont">Segoe UI Variable Display, Segoe UI</FontFamily>
+
+        <!-- Transport button: transparent at rest; on hover a soft ink wash plus a
+             white shine that follows the cursor (see Overlay/GlowButton.cs). -->
+        <Style x:Key="OvButton" TargetType="Button">
+            <Setter Property="Width" Value="32" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="IsTabStop" Value="False" />
+            <Setter Property="UseSystemFocusVisuals" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid x:Name="RootGrid" Background="Transparent" CornerRadius="{TemplateBinding CornerRadius}">
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal" />
+                                    <VisualState x:Name="PointerOver" />
+                                    <VisualState x:Name="Pressed">
+                                        <VisualState.Setters>
+                                            <Setter Target="Wash.Background" Value="{StaticResource PressedBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Disabled">
+                                        <VisualState.Setters>
+                                            <Setter Target="Glyph.Opacity" Value="0.4" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                            <Border x:Name="Wash" Background="{StaticResource HoverBrush}" CornerRadius="{TemplateBinding CornerRadius}" Opacity="0">
+                                <Border.OpacityTransition>
+                                    <ScalarTransition Duration="0:0:0.16" />
+                                </Border.OpacityTransition>
+                            </Border>
+                            <Border x:Name="Shine" CornerRadius="{TemplateBinding CornerRadius}" Opacity="0">
+                                <Border.OpacityTransition>
+                                    <ScalarTransition Duration="0:0:0.2" />
+                                </Border.OpacityTransition>
+                                <Border.Background>
+                                    <RadialGradientBrush Center="0.5,0.5" GradientOrigin="0.5,0.5" RadiusX="0.7" RadiusY="0.7">
+                                        <GradientStop Offset="0" Color="{StaticResource ShineCore}" />
+                                        <GradientStop Offset="1" Color="#00FFFFFF" />
+                                    </RadialGradientBrush>
+                                </Border.Background>
+                            </Border>
+                            <ContentPresenter x:Name="Glyph" HorizontalAlignment="Center" VerticalAlignment="Center" Content="{TemplateBinding Content}" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Application.Resources>
+</Application>

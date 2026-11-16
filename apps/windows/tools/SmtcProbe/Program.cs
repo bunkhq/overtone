@@ -23,8 +23,20 @@ async Task Dump(string why)
         Console.WriteLine($"    {p.Title} — {(string.IsNullOrEmpty(p.Artist) ? "(no artist)" : p.Artist)}  [{p.AlbumTitle}]");
         Console.WriteLine($"    {info.PlaybackStatus}, rate {info.PlaybackRate?.ToString() ?? "-"}, " +
                           $"pos {Fmt(tl.Position)}/{Fmt(tl.EndTime)} (updated {tl.LastUpdatedTime.LocalDateTime:HH:mm:ss}), " +
-                          $"art {(p.Thumbnail is null ? "none" : "yes")}");
+                          $"art {(p.Thumbnail is null ? "none" : "yes")}, seek {(info.Controls.IsPlaybackPositionEnabled ? "yes" : "no")}");
     }
+}
+
+// --seek <app-substring> <seconds>: seek one session (testing seek support without touching others).
+var seekAt = Array.IndexOf(args, "--seek");
+if (seekAt >= 0 && args.Length > seekAt + 2)
+{
+    var target = manager.GetSessions().FirstOrDefault(s => s.SourceAppUserModelId.Contains(args[seekAt + 1], StringComparison.OrdinalIgnoreCase));
+    if (target is null) { Console.WriteLine("no matching session"); return; }
+    var start = target.GetTimelineProperties().StartTime;
+    var ok = await target.TryChangePlaybackPositionAsync((start + TimeSpan.FromSeconds(double.Parse(args[seekAt + 2]))).Ticks);
+    Console.WriteLine($"seek {target.SourceAppUserModelId}: {ok}");
+    await Task.Delay(600);
 }
 
 await Dump("sessions");

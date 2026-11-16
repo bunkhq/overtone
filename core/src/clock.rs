@@ -1,14 +1,16 @@
 //! Playback clock: interpolates position between OS timeline updates.
 //!
 //! The OS reports `position` plus the moment it was true. Some players (Spotify
-//! on Windows) only refresh that every few seconds, and their reports jitter by
-//! a few hundred ms. The clock extrapolates between reports and ignores small
-//! corrections so the progress bar and lyrics never visibly jump backwards.
+//! on Windows) only refresh that every few seconds. The clock extrapolates
+//! between reports and adopts every correction, so lyrics stay exactly on the
+//! player's time; only corrections past the jitter tolerance (or a play-state
+//! change) tell the shell to re-anchor its animations, so small ones never make
+//! the progress bar visibly jump.
 //!
 //! Times are plain milliseconds on any monotonic clock the shell chooses, so
 //! the core never reads the system clock itself.
 
-/// Corrections smaller than this are treated as jitter while playing.
+/// Corrections smaller than this are adopted silently (no re-anchor signal).
 pub const JITTER_TOLERANCE_MS: f64 = 300.0;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -24,7 +26,8 @@ pub struct PlaybackClock {
 /// re-arm its progress animation and lyric timer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClockChange {
-    /// Within jitter tolerance; keep running animations as they are.
+    /// Within jitter tolerance: the position was corrected, but running
+    /// animations can carry on. Lyric timers should still be rescheduled.
     None,
     /// Play state, rate, or a real seek. Re-anchor animations.
     Reanchored,
@@ -62,14 +65,12 @@ impl PlaybackClock {
 
         let state_changed = playing != self.playing || (rate - self.rate).abs() > 1e-3;
         let drift = (observed_now - predicted_now).abs();
-        if !state_changed && playing && drift < JITTER_TOLERANCE_MS {
-            return ClockChange::None;
-        }
         self.anchor_position_ms = observed_now;
         self.anchor_time_ms = now_ms as f64;
         self.playing = playing;
         self.rate = rate;
-        if !state_changed && !playing && drift < 1.0 { ClockChange::None } else { ClockChange::Reanchored }
+        let tolerance = if playing { JITTER_TOLERANCE_MS } else { 1.0 };
+        if state_changed || drift >= tolerance { ClockChange::Reanchored } else { ClockChange::None }
     }
 
     /// Position at `now_ms`, clamped to the track's duration when known.
@@ -135,11 +136,11 @@ mod tests {
     }
 
     #[test]
-    fn small_jitter_is_ignored_seek_is_not() {
+    fn small_correction_is_adopted_quietly_seek_reanchors() {
         let mut c = PlaybackClock::new(Some(200_000));
         c.report(0, 0, true, 1.0, 0);
         assert_eq!(c.report(5_150, 5_000, true, 1.0, 5_000), ClockChange::None);
-        assert_eq!(c.position_at(5_000), 5_000);
+        assert_eq!(c.position_at(5_000), 5_150); // lyrics follow the player exactly
         assert_eq!(c.report(60_000, 6_000, true, 1.0, 6_000), ClockChange::Reanchored);
         assert_eq!(c.position_at(6_000), 60_000);
     }

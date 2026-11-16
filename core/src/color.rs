@@ -91,6 +91,46 @@ impl Lch {
     }
 }
 
+/// Interpolates `a` → `b` in OKLCH (`t` in 0..1), taking the shorter way round
+/// the hue circle. A near-grey end borrows the other end's hue, so a fade from
+/// grey to red never sweeps through unrelated hues on the way.
+pub fn mix_oklch(a: Rgb, b: Rgb, t: f32) -> Rgb {
+    const GREY: f32 = 0.02;
+    let t = t.clamp(0.0, 1.0);
+    let (x, y) = (a.to_oklab().to_lch(), b.to_oklab().to_lch());
+    let (hx, hy) = match (x.c < GREY, y.c < GREY) {
+        (true, false) => (y.h, y.h),
+        (false, true) => (x.h, x.h),
+        _ => (x.h, y.h),
+    };
+    let mut dh = (hy - hx) % std::f32::consts::TAU;
+    if dh > std::f32::consts::PI {
+        dh -= std::f32::consts::TAU;
+    } else if dh < -std::f32::consts::PI {
+        dh += std::f32::consts::TAU;
+    }
+    Lch::new(x.l + (y.l - x.l) * t, x.c + (y.c - x.c) * t, hx + dh * t).to_rgb()
+}
+
+/// Moves `base` toward `toward`'s hue and chroma by `t`, keeping `base`'s OKLCH
+/// lightness. Text contrast tracks lightness, so a tint made this way keeps inks
+/// solved against `base` legible, unlike a straight mix.
+pub fn tint_oklch(base: Rgb, toward: Rgb, t: f32) -> Rgb {
+    let mixed = mix_oklch(base, toward, t).to_oklab().to_lch();
+    // Keep the WCAG luminance of base (not just its OKLab lightness): hue and
+    // chroma shift luminance at equal L, and inks are solved against base. Bisect
+    // L for the mixed hue and chroma; chroma is trimmed only if the gamut forces it.
+    let target = base.luminance();
+    let (mut lo, mut hi) = (0.0f32, 1.0f32);
+    let mut out = base;
+    for _ in 0..24 {
+        let l = (lo + hi) / 2.0;
+        out = Lch::new(l, mixed.c, mixed.h).to_rgb();
+        if out.luminance() < target { lo = l } else { hi = l }
+    }
+    out
+}
+
 /// Smallest angle between two hues, in radians (0..π).
 pub fn hue_diff(a: f32, b: f32) -> f32 {
     let d = (a - b).abs() % std::f32::consts::TAU;
@@ -144,6 +184,20 @@ mod tests {
             assert!((rgb.g as i32 - back.g as i32).abs() <= 1, "{rgb:?} -> {back:?}");
             assert!((rgb.b as i32 - back.b as i32).abs() <= 1, "{rgb:?} -> {back:?}");
         }
+    }
+
+    #[test]
+    fn mix_hits_ends_and_avoids_grey_midpoint() {
+        let (red, teal) = (Rgb::new(220, 40, 60), Rgb::new(20, 170, 160));
+        assert_eq!(mix_oklch(red, teal, 0.0), red);
+        let end = mix_oklch(red, teal, 1.0);
+        assert!((end.r as i32 - teal.r as i32).abs() <= 1 && (end.g as i32 - teal.g as i32).abs() <= 1);
+        // An RGB midpoint of complementary colours is near grey; OKLCH keeps chroma.
+        let mid = mix_oklch(red, teal, 0.5).to_oklab().chroma();
+        assert!(mid > 0.08, "chroma {mid}");
+        // Grey to colour keeps the colour's hue throughout.
+        let g = mix_oklch(Rgb::new(128, 128, 128), red, 0.5).to_oklab().hue();
+        assert!(hue_diff(g, red.to_oklab().hue()) < 0.05);
     }
 
     #[test]

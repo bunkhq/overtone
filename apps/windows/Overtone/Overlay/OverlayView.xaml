@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="Overtone.Overlay.OverlayView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Overtone.Overlay"
+    FontFamily="{StaticResource UiFont}">
+
+    <!-- Root padding is the shadow's room inside the transparent window (OverlayView.Pad).
+         Its transparent background makes the margin a grab zone for resizing.
+         The card sits top-left with an explicit size: during a mode change the
+         window moves with it and the size animates frame by frame. -->
+    <Grid x:Name="Root" Padding="20,14,20,26" Background="Transparent">
+        <!-- Shadow: a pre-rendered nine-grid (scripts/gen-shadow.py) that extends into the
+             margin by exactly Pad and fades to nothing before the window edge. -->
+        <Image x:Name="ShadowHost" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-20,-14,-20,-26"
+               Stretch="Fill" NineGrid="35,29,35,41" IsHitTestVisible="False" />
+
+        <!-- The card: blurred cover, palette scrim, rim, then one of three layouts. -->
+        <Grid x:Name="Card" Background="Transparent" AutomationProperties.Name="Overtone overlay"
+              HorizontalAlignment="Left" VerticalAlignment="Top">
+            <Rectangle x:Name="BaseFill" Fill="{StaticResource BaseBrush}" />
+            <Image x:Name="BackA" Stretch="UniformToFill" />
+            <Image x:Name="BackB" Stretch="UniformToFill" />
+            <Rectangle x:Name="Scrim" Fill="{StaticResource ScrimBrush}" />
+            <Rectangle x:Name="Tint" Fill="{StaticResource TintBrush}" Visibility="Collapsed" />
+            <Border x:Name="Rim" BorderThickness="1" BorderBrush="{StaticResource RimBrush}" />
+
+            <!-- Layouts stretch to the card: the window sets its size freely and the
+                 height picks the layout (OverlayView.LayoutFor). -->
+            <!-- Pill: the current lyric over its progress line, centred as one group,
+                 so neither the top nor the bottom of the pill reads empty. A taller pill
+                 adds the song above the lyric and grows its artwork. -->
+            <Grid x:Name="PillPanel" Padding="6,6,4,6" ColumnSpacing="12" Visibility="Collapsed">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition x:Name="PillArtColumn" Width="36" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Border x:Name="PillArt" Width="36" Height="36" CornerRadius="8" Background="{StaticResource PlaceholderBrush}">
+                    <Border CornerRadius="8" Background="{StaticResource ArtBrush}" />
+                </Border>
+                <!-- Text column. One line: a centred group. Two lines and up: the song line pinned near the
+                     cover's top, the progress row near its bottom, the lyric centred between, so the
+                     padding stays even at every height (extra height opens around the lyric). -->
+                <Grid x:Name="PillText" Grid.Column="1" VerticalAlignment="Center">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock x:Name="PillTitle" FontSize="11.5" Margin="0,0,0,2" Foreground="{StaticResource InkSoftBrush}"
+                               TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" Visibility="Collapsed" />
+                    <!-- A Canvas lets a long line keep its natural width and scroll inside the clip. -->
+                    <Grid x:Name="PillLineFrame" Grid.Row="1" VerticalAlignment="Center">
+                        <Canvas x:Name="PillLineHost" Height="19">
+                        <TextBlock x:Name="PillLineA" FontSize="13.5" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TitleBrush}" TextWrapping="NoWrap" />
+                        <TextBlock x:Name="PillLineB" FontSize="13.5" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TitleBrush}" TextWrapping="NoWrap" />
+                    </Canvas>
+                    </Grid>
+                    <!-- Progress, and in a tall pill the controls beside it (so the text gets the full width). -->
+                    <Grid x:Name="PillBottom" Grid.Row="2" Margin="0,5,0,0" ColumnSpacing="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <!-- A 12 px hit strip around the 2 px bar makes it a slider; the margin keeps the layout unchanged. -->
+                        <Grid x:Name="PillScrub" Height="12" Margin="0,-5,0,-5" VerticalAlignment="Center" Background="Transparent">
+                            <Border x:Name="PillTrack" Height="2" CornerRadius="1" VerticalAlignment="Center" Background="{StaticResource TrackBrush}">
+                                <Rectangle x:Name="PillFill" Fill="{StaticResource AccentBrush}" />
+                            </Border>
+                        </Grid>
+                        <local:TransportBar x:Name="PillTransportTall" Grid.Column="1" Margin="0,0,-4,0" Visibility="Collapsed" />
+                    </Grid>
+                </Grid>
+                <local:TransportBar x:Name="PillTransport" Grid.Column="2" />
+            </Grid>
+
+            <!-- Card: the full player, with a line of its own for the current lyric.
+                 Margins rather than row spacing, so the lyric row takes no room when hidden. -->
+            <Grid x:Name="CardPanel" Padding="16,16,8,8" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid ColumnSpacing="12" Margin="0,0,4,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition x:Name="CardArtColumn" Width="64" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border x:Name="CardArt" Width="64" Height="64" CornerRadius="10" Background="{StaticResource PlaceholderBrush}">
+                        <Border CornerRadius="10" Background="{StaticResource ArtBrush}" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                        <TextBlock x:Name="CardTitle" FontFamily="{StaticResource DisplayFont}" FontSize="16" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TitleBrush}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                        <TextBlock x:Name="CardArtist" FontSize="13" Foreground="{StaticResource InkSoftBrush}"
+                                   TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                    </StackPanel>
+                </Grid>
+                <!-- A Canvas, like the pill's line: a long lyric keeps its width and glides across inside the clip. -->
+                <Grid x:Name="CardLyricFrame" Grid.Row="1" Margin="0,6,4,0">
+                    <Canvas x:Name="CardLyricHost" Height="18">
+                    <TextBlock x:Name="CardLyric" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" TextWrapping="NoWrap" />
+                </Canvas>
+                </Grid>
+                <Grid x:Name="CardProgress" Grid.Row="2" Margin="0,6,0,0" ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="CardPos" FontSize="11" Foreground="{StaticResource InkSoftBrush}" Text="0:00" VerticalAlignment="Center" />
+                    <Grid x:Name="CardScrub" Grid.Column="1" Height="16" VerticalAlignment="Center" Background="Transparent">
+                        <Border x:Name="CardTrack" Height="4" CornerRadius="2" VerticalAlignment="Center" Background="{StaticResource TrackBrush}">
+                            <Rectangle x:Name="CardFill" Fill="{StaticResource AccentBrush}" />
+                        </Border>
+                    </Grid>
+                    <TextBlock x:Name="CardDur" Grid.Column="2" FontSize="11" Foreground="{StaticResource InkSoftBrush}" Text="0:00" VerticalAlignment="Center" />
+                    <local:TransportBar x:Name="CardTransport" Grid.Column="3" Margin="2,0,0,0" />
+                </Grid>
+            </Grid>
+
+            <!-- Lyric panel: the previous line, the current one, then whatever follows,
+                 running past the bottom edge under a fade (a composition mask over LyricSource). -->
+            <Grid x:Name="LyricsPanel" Padding="16,12,12,16" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid x:Name="LyricWindow">
+                    <!-- Drawn through a mask, not directly; 8 px wider each side so glyph overhang survives. -->
+                    <Grid x:Name="LyricSource" Margin="-8,0,-8,0">
+                        <Canvas x:Name="LyricColumn" Margin="8,0,0,0" VerticalAlignment="Top" />
+                    </Grid>
+                    <TextBlock x:Name="LyricStatus" VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold"
+                               Foreground="{StaticResource InkFaintBrush}" TextTrimming="CharacterEllipsis" Visibility="Collapsed" />
+                </Grid>
+                <!-- With no lyrics the panel folds down to this row alone (divider and gap removed in code). -->
+                <Grid x:Name="LyricsFooter" Grid.Row="1" Margin="0,10,0,0" Padding="0,10,0,0" ColumnSpacing="10"
+                      BorderThickness="0,1,0,0" BorderBrush="{StaticResource RimBrush}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="34" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border x:Name="LyricsArt" Width="34" Height="34" CornerRadius="7" Background="{StaticResource PlaceholderBrush}">
+                        <Border CornerRadius="7" Background="{StaticResource ArtBrush}" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock x:Name="LyricsTitle" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}"
+                                   TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                        <TextBlock x:Name="LyricsArtist" FontSize="12" Foreground="{StaticResource InkSoftBrush}"
+                                   TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                    </StackPanel>
+                    <local:TransportBar x:Name="LyricsTransport" Grid.Column="2" Margin="0,0,-4,0" />
+                </Grid>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>

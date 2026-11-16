@@ -14,7 +14,7 @@ Fully native, two shells (user's choice):
 
 - macOS: Swift, AppKit `NSPanel` hosting SwiftUI, Core Animation.
 - Windows: C# / WinUI 3 (Windows App SDK) with the Composition layer.
-- Shared logic (lyrics, palette, sync clock, caching) is an open decision: a small Rust core bound to both shells via UniFFI is the proposed approach, so the hard logic is written once. See `docs/ARCHITECTURE.md`.
+- Shared logic (lyrics, palette, sync clock, caching): a small Rust core, exposed to both shells through a C ABI, so the hard logic is written once. See `docs/ARCHITECTURE.md`.
 
 ## Users
 
