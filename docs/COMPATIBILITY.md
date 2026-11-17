@@ -58,3 +58,8 @@ The list exposes four gaps the shell and core must handle rather than ignore:
 4. **Several sessions at once** (e.g. Spotify plus a YouTube tab). Default to the session that is actually playing, then the system's "current" session. Let the user pin a source app or ignore apps (by `SourceAppUserModelId`) from the tray menu.
 
 macOS has no equivalent list yet. The macOS source (Now Playing via `mediaremote-adapter`) covers whatever appears in Control Centre's Now Playing, which includes Spotify, Music, and browsers playing media; the list gets built as we test.
+
+macOS differences from the Windows list:
+
+- **One session.** macOS Now Playing exposes only the system's current session, so there is no session picking; whichever app last took Now Playing is shown. Browser tabs are reported under the browser's bundle ID (`parentApplicationBundleIdentifier`).
+- **Fallback.** If the adapter's self-test fails (Apple closes the workaround), Overtone falls back to Spotify's and Music's distributed notifications: title, artist and album only, no artwork, and no position from Music (so no progress bar or synced lyrics there). Controls then go through AppleScript, which asks for Automation permission once.

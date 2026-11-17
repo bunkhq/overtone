@@ -48,3 +48,14 @@ Settings live in `%LOCALAPPDATA%\Overtone\settings.json`; unexpected errors are 
 - `apps/windows/tools/SmtcProbe`: prints every media session Windows sees and streams changes.
 - `apps/windows/tools/FakePlayer`: a silent, real media session for testing without touching your player:
   `dotnet run -- "Mr. Brightside" "The Killers" "Hot Fuss" 222 cover.png 30` (title, artist, album, seconds, artwork, start at).
+
+## Build (macOS)
+
+Needs Xcode 16+ (Swift 6), Rust, and cmake (`brew install cmake`).
+
+```
+scripts/build-macos.sh                 # core + adapter + app → apps/macos/build/Overtone.app
+open apps/macos/build/Overtone.app
+```
+
+See [apps/macos/README.md](apps/macos/README.md) for development, tests and signing.

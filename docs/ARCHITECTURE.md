@@ -27,7 +27,7 @@ Per-service APIs (Spotify Web API, etc.) are **not** needed for the core. Add th
 └───────────────▲───────────────────────────────────────┬────────────────┘
                 │ events: TrackChanged, PlaybackChanged │ calls
 ┌───────────────┴───────────────────────────────────────▼────────────────┐
-│ Core (Rust, one codebase, exposed through a small C ABI)               │
+│ Core (Rust, one codebase: C ABI for Windows, UniFFI for macOS)         │
 │  palette  ─ OKLab k-means + contrast solver → Palette{base,accent,ink} │
 │  lyrics   ─ providers (LRCLIB) · LRC parser · track matcher · cache    │
 │  clock    ─ playback clock model (position interpolation, seeks)       │
@@ -39,12 +39,12 @@ Rule: **the shell owns anything the OS draws or reports; the core owns anything 
 
 ### Why a Rust core instead of writing it twice
 
-The shared logic is small (~2k lines) but fiddly: palette scoring, LRC edge cases, fuzzy track matching, cache invalidation. Written twice, the two apps drift and every bug gets fixed twice. The binding is a deliberately small C ABI (`core/src/ffi.rs`): plain structs for the hot paths (palette, backdrop, clock, OKLCH mix) and a JSON string for lyrics. C# calls it with P/Invoke (`apps/windows/Overtone/Core/CoreLib.cs`); Swift can call the same functions through a bridging header. Cost: a cargo step in each build (the Windows `.csproj` runs it and copies `overtone_core.dll`). [UniFFI](https://github.com/mozilla/uniffi-rs) stays an option if the surface grows, but at about a dozen functions a hand-written ABI is less machinery.
+The shared logic is small (~2k lines) but fiddly: palette scoring, LRC edge cases, fuzzy track matching, cache invalidation. Written twice, the two apps drift and every bug gets fixed twice. The binding is a deliberately small C ABI (`core/src/ffi.rs`): plain structs for the hot paths (palette, backdrop, clock, OKLCH mix) and a JSON string for lyrics. C# calls it with P/Invoke (`apps/windows/Overtone/Core/CoreLib.cs`); Swift can call the same functions through a bridging header. Cost: a cargo step in each build (the Windows `.csproj` runs it and copies `overtone_core.dll`). The macOS shell uses [UniFFI](https://github.com/mozilla/uniffi-rs) instead (`core/src/uniffi_api.rs`, behind the `uniffi` feature): it generates the Swift bindings and an `.xcframework` from the same crate (`scripts/build-core-macos.sh`). Both bindings wrap the same core functions.
 
 ## 3. Repository layout
 
 ```
-/core                    Rust crate: palette, lyrics, clock, store (+ C ABI in src/ffi.rs)
+/core                    Rust crate: palette, lyrics, clock, cache (+ C ABI in src/ffi.rs, UniFFI in src/uniffi_api.rs)
   /src
   /tests                 golden tests: sample artworks → expected palettes, LRC fixtures
 /apps
@@ -155,7 +155,7 @@ Golden tests: a folder of sample covers with their expected palettes, so changes
 - **Provider: [LRCLIB](https://lrclib.net)** (free, no API key, community-run, returns synced LRC). Call `GET /api/get` with artist, track, album and duration; fall back to `/api/search` and pick the result whose duration is within ±2 s. Send a `User-Agent` naming the app and its repo URL, as LRCLIB asks.
 - `LyricsProvider` trait so more sources can be added. Avoid scraping services whose terms forbid it; that matters once the repo is public.
 - **Matcher** normalises before lookup: strip `- Remastered 2011`, `(feat. …)`, `[Live]`, and "Topic" suffixes from YouTube channel names, and fold case and accents.
-- **Cache**: one row per (normalised artist, title, duration bucket) in a small SQLite file. Cache "no lyrics found" as well, for 7 days, so missing tracks aren't refetched on every play.
+- **Cache** (`core/src/lyrics/cache.rs`, used by macOS): one small JSON file per (normalised artist, title, 4 s duration bucket) in the app's cache folder. Cache "no lyrics found" as well, for 7 days, so missing tracks aren't refetched on every play. Plain files rather than SQLite: entries are tiny, written once and read by key.
 - Plain (unsynced) lyrics are shown as a slow auto-scroll, or the lyrics row is hidden; the user decides in settings.
 - Instrumental gaps longer than 5 s show a breathing three-dot indicator in place of the line.
 
@@ -168,8 +168,8 @@ Golden tests: a folder of sample covers with their expected palettes, so changes
 
 1. ~~**Core skeleton**: palette + LRC parser + clock, with tests. No UI.~~ Done: `core/` (palette, LRC, clock, matcher, LRCLIB provider, OKLCH mix, C ABI; 39 tests). Still to add: SQLite cache.
 2. ~~**Windows source spike**~~ Done: `apps/windows/tools/SmtcProbe` prints every SMTC session and streams changes (`dotnet run`). Verified with Spotify; the rest of `docs/COMPATIBILITY.md` gets ticked off as tested.
-3. **macOS source spike**: the same with `mediaremote-adapter`, on the newest macOS available.
+3. ~~**macOS source spike**~~ Done: `mediaremote-adapter` passes its self-test and streams on macOS 27.0. Built from a pinned revision by `scripts/build-adapter-macos.sh`.
 4. ~~**One overlay, one OS**~~ Done on Windows: `apps/windows/Overtone`. Pill, player card and lyric panel; palette and blurred cover per track with an OKLCH cross-fade; synced lyrics; drag with magnetic edge snap; mode changes anchored to the nearest corner; hides itself when nothing plays; tray icon with show/hide, modes and quit; follows the OS animation and transparency switches.
 5. Settings window, launch at login, global hotkeys, ghost mode, tuck, re-placement on display change, the coloured tray icon (§9).
-6. Second OS shell, reaching parity against the same tokens and core.
+6. Second OS shell, reaching parity against the same tokens and core. macOS (`apps/macos`): menu bar app with pill, player card and lyric panel picked by height, free resize, marquee and wrapped lyrics, lyric scrolling and click-to-seek, the progress-bar scrubber, Windows' timed one-pass glide for long lines in the pill and card, Discord presence (with the status-line choice and the word filter), backgrounds (blurred cover, gradient, solid, and a macOS-only Liquid Glass mode on macOS 26+), "Match system" tone (both apps), global hotkeys, ghost mode, open at login. Also ported: folding when a song has no lyrics, the layout morph (fixed-size layouts cross-fading inside the animating window), "music only", the cursor-following button shine (off under Liquid Glass, as under Windows' native look), and an opt-in coloured menu-bar icon from the core's `tray_colors`. Still to do on both: tuck, full-screen auto-hide.
 7. Signing and notarisation (macOS) and MSIX or installer signing (Windows), then the open-source release.

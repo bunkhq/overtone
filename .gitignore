@@ -14,3 +14,9 @@ DerivedData/
 # OS
 .DS_Store
 Thumbs.db
+# macOS app build output and generated core bindings
+/apps/macos/build/
+/apps/macos/.build/
+/apps/macos/.swiftpm/
+/apps/macos/Frameworks/
+/apps/macos/Sources/OvertoneCore/Generated/
