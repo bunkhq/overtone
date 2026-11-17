@@ -17,7 +17,19 @@ public enum OverlayBackground
 }
 
 /// <summary>Dark card with light text, or a pale card with dark text. Auto picks light only for pale covers.</summary>
-public enum OverlayTone { Auto, Dark, Light }
+public enum OverlayTone { Auto, Dark, Light, System }
+
+/// <summary>Word filter for what Overtone sends to Discord. Values match the core's levels.</summary>
+public enum DiscordFilter { Off = 0, Offensive = 1, All = 2 }
+
+/// <summary>What the Discord member list shows after "Listening to".</summary>
+public enum DiscordStatusLine
+{
+    Artist,
+    Title,
+    /// <summary>The lyric being sung (the artist between lines and without lyrics).</summary>
+    Lyric,
+}
 
 /// <summary>Small persisted state in %LOCALAPPDATA%\Overtone\settings.json.</summary>
 public sealed class Settings
@@ -35,6 +47,12 @@ public sealed class Settings
     /// <summary>Discord Rich Presence on/off (tray menu). Off until the user turns it on.</summary>
     public bool DiscordPresence { get; set; } = false;
 
+    /// <summary>The Discord status line: "Listening to" the artist, the song title or the current lyric (tray menu).</summary>
+    public DiscordStatusLine DiscordStatus { get; set; } = DiscordStatusLine.Artist;
+
+    /// <summary>Word filter for the Discord status and card (tray menu). On by default: all swear words.</summary>
+    public DiscordFilter DiscordFilter { get; set; } = DiscordFilter.All;
+
     /// <summary>
     /// Native Windows look (tray menu, on by default): system frame, shadow and corners,
     /// Acrylic tinted with the album colour, Fluent icons. Off: Overtone's own drawn card.
@@ -45,8 +63,8 @@ public sealed class Settings
     public bool MusicOnly { get; set; } = true;
 
     /// <summary>
-    /// Application ID of the Discord app the presence card belongs to; its name is
-    /// the card's title and its art assets hold the player icons. See docs/DISCORD.md.
+    /// Overrides the Discord application the presence card belongs to (development
+    /// only; unset uses Overtone's own, DiscordPresence.DefaultAppId). See docs/DISCORD.md.
     /// </summary>
     public string? DiscordAppId { get; set; }
 

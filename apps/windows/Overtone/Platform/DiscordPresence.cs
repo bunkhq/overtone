@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.Http;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -31,6 +32,8 @@ public sealed class DiscordPresence : IDisposable
     private DiscordIpc? _ipc;
     private bool _connecting;
     private PresenceState? _state;
+    /// <summary>When <see cref="_state"/> was captured, so a send up to 4 s later can advance its position.</summary>
+    private long _stateAt;
     private string? _lastSent;
     private long _lastStart;
     private DateTime _lastSendAt = DateTime.MinValue;
@@ -48,8 +51,11 @@ public sealed class DiscordPresence : IDisposable
         if (Enabled) _ = EnsureConnectedAsync();
     }
 
-    /// <summary>The Discord application whose name and art assets the card uses (settings.json, DiscordAppId).</summary>
-    public bool Configured => !string.IsNullOrWhiteSpace(_settings.DiscordAppId);
+    /// <summary>Overtone's Discord application: its name heads the card and its art assets hold the player icons.</summary>
+    public const string DefaultAppId = "1571417511696535643";
+
+    /// <summary>The built-in application, unless settings.json overrides it (DiscordAppId, for development).</summary>
+    private string AppId => string.IsNullOrWhiteSpace(_settings.DiscordAppId) ? DefaultAppId : _settings.DiscordAppId.Trim();
 
     public bool Enabled
     {
@@ -76,10 +82,39 @@ public sealed class DiscordPresence : IDisposable
         }
     }
 
+    /// <summary>What the member list's "Listening to …" line shows (tray menu).</summary>
+    public DiscordStatusLine StatusLine
+    {
+        get => _settings.DiscordStatus;
+        set
+        {
+            if (_settings.DiscordStatus == value) return;
+            _settings.DiscordStatus = value;
+            _settings.Save();
+            Schedule();
+        }
+    }
+
+    /// <summary>The word filter for everything sent to Discord (tray menu).</summary>
+    public DiscordFilter Filter
+    {
+        get => _settings.DiscordFilter;
+        set
+        {
+            if (_settings.DiscordFilter == value) return;
+            _settings.DiscordFilter = value;
+            _settings.Save();
+            Schedule();
+        }
+    }
+
+    private string Clean(string s) => CoreLib.Censor(s, (int)Filter);
+
     /// <summary>Called by the overlay on track, play-state, seek and lyric changes.</summary>
     public void Update(PresenceState? state)
     {
         _state = state;
+        _stateAt = Stopwatch.GetTimestamp();
         if (state is not null) _ = ResolveCoverAsync(state.Track);
         Schedule();
     }
@@ -121,25 +156,30 @@ public sealed class DiscordPresence : IDisposable
     {
         if (s is null || !s.Playing) return null;
         var t = s.Track;
-        var title = Fit(string.IsNullOrWhiteSpace(t.Title) ? "Untitled" : t.Title);
-        var artist = Fit(string.IsNullOrWhiteSpace(t.Artist) ? title : t.Artist);
+        // Every text sent to Discord passes the word filter.
+        var title = Fit(Clean(string.IsNullOrWhiteSpace(t.Title) ? "Untitled" : t.Title));
+        var artist = Fit(string.IsNullOrWhiteSpace(t.Artist) ? title : Clean(t.Artist));
+        var lyric = s.Lyric is null ? null : Clean(s.Lyric);
         var service = Service(t.SourceApp);
         var serviceIcon = Icon(service);
         _covers.TryGetValue(CoverKey(t), out var cover);
-        var album = string.IsNullOrWhiteSpace(t.Album) || t.Album == t.Title ? null : t.Album;
+        var album = string.IsNullOrWhiteSpace(t.Album) || t.Album == t.Title ? null : Clean(t.Album);
 
         // Card lines: title, artist, then the current lyric (the album between lines).
-        // The member list reads "Listening to {artist}" from state.
+        // The member list reads "Listening to …" from state (status_display_type 1)
+        // or details (2), per the user's choice. For the lyric, the lyric moves into
+        // state and the artist takes its place on the card's third line.
+        var lyricStatus = StatusLine == DiscordStatusLine.Lyric && lyric is not null;
         var activity = new JsonObject
         {
             ["type"] = 2,                 // Listening
-            ["status_display_type"] = 1,  // member list shows "Listening to {state}"
+            ["status_display_type"] = StatusLine == DiscordStatusLine.Title ? 2 : 1,
             ["details"] = title,
-            ["state"] = artist,
+            ["state"] = lyricStatus ? Fit(lyric!) : artist,
             ["assets"] = new JsonObject
             {
                 ["large_image"] = cover ?? (_assets.Contains("overtone") ? "overtone" : serviceIcon),
-                ["large_text"] = Fit(s.Lyric ?? album ?? title),
+                ["large_text"] = Fit(lyricStatus ? artist : lyric ?? album ?? title),
             },
         };
         if (serviceIcon is not null)
@@ -151,7 +191,11 @@ public sealed class DiscordPresence : IDisposable
         {
             // Start/end make Discord draw the progress bar and elapsed time. Small
             // clock corrections keep the previous start so they don't cost an update.
-            var start = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - s.PositionMs;
+            // The state was captured when it changed; this send can be up to 4 s later
+            // (rate limit), so advance the position by the time since, or Discord's
+            // elapsed time runs that far behind.
+            var position = s.PositionMs + (s.Playing ? (long)Stopwatch.GetElapsedTime(_stateAt).TotalMilliseconds : 0);
+            var start = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - position;
             if (Math.Abs(start - _lastStart) < 1500) start = _lastStart;
             _lastStart = start;
             activity["timestamps"] = new JsonObject { ["start"] = start, ["end"] = start + s.DurationMs.Value };
@@ -216,9 +260,9 @@ public sealed class DiscordPresence : IDisposable
 
     private async Task EnsureConnectedAsync()
     {
-        if (!Enabled || _connecting || _ipc?.Connected == true || !Configured) return;
+        if (!Enabled || _connecting || _ipc?.Connected == true) return;
         _connecting = true;
-        var appId = _settings.DiscordAppId!.Trim();
+        var appId = AppId;
         _ = LoadAssetsAsync(appId);
         var ipc = new DiscordIpc(appId);
         var ok = false;

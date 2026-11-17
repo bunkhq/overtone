@@ -46,8 +46,19 @@ internal static unsafe partial class CoreLib
     [DllImport(Dll)] private static extern uint ot_mix_oklch(uint a, uint b, float t);
     [DllImport(Dll)] private static extern uint ot_tint_oklch(uint baseColor, uint toward, float t);
     [DllImport(Dll)] private static extern float ot_flat_tint();
+    [DllImport(Dll)] private static extern nint ot_censor([MarshalAs(UnmanagedType.LPUTF8Str)] string text, int level);
 
     public static string Version => Marshal.PtrToStringUTF8(ot_version()) ?? "?";
+
+    /// <summary>The text with filtered words replaced by asterisks, one per character (core/src/censor.rs).</summary>
+    /// <param name="level">0 off, 1 slurs and offensive terms, 2 all swear words.</param>
+    public static string Censor(string text, int level)
+    {
+        if (level == 0 || string.IsNullOrEmpty(text)) return text;
+        var ptr = ot_censor(text, level);
+        try { return Marshal.PtrToStringUTF8(ptr) ?? text; }
+        finally { ot_string_free(ptr); }
+    }
 
     /// <summary>Blocking: does iTunes or Deezer know this song? Null when neither could be reached.</summary>
     public static bool? IsCatalogSong(string title, string artist) => ot_is_catalog_song(title, artist) switch

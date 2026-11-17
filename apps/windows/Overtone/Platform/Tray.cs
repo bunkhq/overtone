@@ -17,7 +17,7 @@ public sealed class Tray : IDisposable
     private readonly TaskbarIcon _icon;
     private readonly OverlayWindow _overlay;
     private readonly DispatcherQueue _ui = DispatcherQueue.GetForCurrentThread();
-    private readonly ToggleMenuFlyoutItem _cover, _gradient, _solid, _auto, _dark, _light;
+    private readonly ToggleMenuFlyoutItem _cover, _gradient, _solid, _auto, _system, _dark, _light, _statusArtist, _statusTitle, _statusLyric, _filterAll, _filterOffensive, _filterOff;
     private readonly MenuFlyoutItem _showHide;
     private readonly ToggleMenuFlyoutItem _discord, _musicOnly, _nativeLook, _startup;
     private readonly DiscordPresence _presence;
@@ -42,12 +42,19 @@ public sealed class Tray : IDisposable
             _media.MusicOnly = _settings.MusicOnly;
         });
         _discord = Choice("Show in Discord status", () => _presence.Enabled = !_presence.Enabled);
+        _statusArtist = Choice("Artist", () => _presence.StatusLine = DiscordStatusLine.Artist);
+        _statusTitle = Choice("Song title", () => _presence.StatusLine = DiscordStatusLine.Title);
+        _statusLyric = Choice("Current lyric", () => _presence.StatusLine = DiscordStatusLine.Lyric);
+        _filterAll = Choice("All swear words", () => _presence.Filter = DiscordFilter.All);
+        _filterOffensive = Choice("Slurs and offensive terms", () => _presence.Filter = DiscordFilter.Offensive);
+        _filterOff = Choice("Off", () => _presence.Filter = DiscordFilter.Off);
         _startup = Choice("Start with Windows", () => Startup.Enabled = !Startup.Enabled);
 
         _cover = Choice("Blurred cover", () => _overlay.Background = OverlayBackground.Cover);
         _gradient = Choice("Gradient", () => _overlay.Background = OverlayBackground.Gradient);
         _solid = Choice("Solid colour", () => _overlay.Background = OverlayBackground.Solid);
         _auto = Choice("Match the cover", () => _overlay.Tone = OverlayTone.Auto);
+        _system = Choice("Match system", () => _overlay.Tone = OverlayTone.System);
         _dark = Choice("Dark", () => _overlay.Tone = OverlayTone.Dark);
         _light = Choice("Light", () => _overlay.Tone = OverlayTone.Light);
         _showHide = new MenuFlyoutItem { Command = new Relay(() => _overlay.UserVisible = !_overlay.UserVisible) };
@@ -61,6 +68,7 @@ public sealed class Tray : IDisposable
         background.Items.Add(_solid);
         var tone = new MenuFlyoutSubItem { Text = "Tone" };
         tone.Items.Add(_auto);
+        tone.Items.Add(_system);
         tone.Items.Add(_dark);
         tone.Items.Add(_light);
         menu.Items.Add(_nativeLook);
@@ -69,6 +77,16 @@ public sealed class Tray : IDisposable
         menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(_musicOnly);
         menu.Items.Add(_discord);
+        var status = new MenuFlyoutSubItem { Text = "Discord status shows" };
+        status.Items.Add(_statusArtist);
+        status.Items.Add(_statusTitle);
+        status.Items.Add(_statusLyric);
+        menu.Items.Add(status);
+        var filter = new MenuFlyoutSubItem { Text = "Discord word filter" };
+        filter.Items.Add(_filterAll);
+        filter.Items.Add(_filterOffensive);
+        filter.Items.Add(_filterOff);
+        menu.Items.Add(filter);
         menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(_startup);
         menu.Items.Add(new MenuFlyoutItem { Text = "Quit Overtone", Command = new Relay(quit) });
@@ -128,16 +146,21 @@ public sealed class Tray : IDisposable
         _gradient.IsChecked = _overlay.Background == OverlayBackground.Gradient;
         _solid.IsChecked = _overlay.Background == OverlayBackground.Solid;
         _auto.IsChecked = _overlay.Tone == OverlayTone.Auto;
+        _system.IsChecked = _overlay.Tone == OverlayTone.System;
         _dark.IsChecked = _overlay.Tone == OverlayTone.Dark;
         _light.IsChecked = _overlay.Tone == OverlayTone.Light;
         _discord.IsChecked = _presence.Enabled;
+        _statusArtist.IsChecked = _presence.StatusLine == DiscordStatusLine.Artist;
+        _statusTitle.IsChecked = _presence.StatusLine == DiscordStatusLine.Title;
+        _statusLyric.IsChecked = _presence.StatusLine == DiscordStatusLine.Lyric;
+        _filterAll.IsChecked = _presence.Filter == DiscordFilter.All;
+        _filterOffensive.IsChecked = _presence.Filter == DiscordFilter.Offensive;
+        _filterOff.IsChecked = _presence.Filter == DiscordFilter.Off;
         _musicOnly.IsChecked = _settings.MusicOnly;
         _nativeLook.IsChecked = _overlay.NativeLook;
         _startup.IsChecked = Startup.Enabled;
         // The Background choice applies to the drawn card; native look uses tinted Acrylic.
         _cover.IsEnabled = _gradient.IsEnabled = _solid.IsEnabled = !_overlay.NativeLook;
-        // Without an application ID there is nothing to connect as; say so in place.
-        _discord.Text = _presence.Configured ? "Show in Discord status" : "Show in Discord status (needs app ID, see docs/DISCORD.md)";
     }
 
     public void Dispose()

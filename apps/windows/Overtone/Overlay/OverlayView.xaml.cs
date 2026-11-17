@@ -950,18 +950,36 @@ public sealed partial class OverlayView : UserControl
         {
             if (_tone == value) return;
             _tone = value;
+            if (value == OverlayTone.System && _systemTheme is null)
+            {
+                // Follow light/dark switches live; the event arrives off the UI thread.
+                _systemTheme = new Windows.UI.ViewManagement.UISettings();
+                _systemTheme.ColorValuesChanged += (_, _) => DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (_tone == OverlayTone.System) Recolor(animate: Live);
+                });
+            }
             Recolor(animate: Live);
         }
     }
 
     private void Recolor(bool animate)
     {
-        var force = _tone switch { OverlayTone.Dark => 0, OverlayTone.Light => 1, _ => -1 };
+        var force = _tone switch { OverlayTone.Dark => 0, OverlayTone.Light => 1, OverlayTone.System => SystemDark() ? 0 : 1, _ => -1 };
         var p = _artwork is { } a ? CoreLib.Palette(a.Rgba, a.Width, a.Height, force) : CoreLib.Palette([], 0, 0, force);
         _theme.Apply(p, animate);
         ThemeApplied?.Invoke(p);
         // The tray icon follows the cover; with no artwork it returns to the brand colours.
         PaletteChanged?.Invoke(_artwork is null ? null : p);
+    }
+
+    private Windows.UI.ViewManagement.UISettings? _systemTheme;
+
+    /// <summary>Windows' app mode: the system background colour is dark in dark mode.</summary>
+    private static bool SystemDark()
+    {
+        var bg = new Windows.UI.ViewManagement.UISettings().GetColorValue(Windows.UI.ViewManagement.UIColorType.Background);
+        return bg.R + bg.G + bg.B < 384;
     }
 
     /// <summary>The palette now in use (a neutral one without artwork); native look tints its Acrylic with it.</summary>
