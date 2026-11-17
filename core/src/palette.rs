@@ -25,6 +25,7 @@ pub const HIGHLIGHT_TARGET: f32 = 4.5;
 pub const FLAT_TINT: f32 = 0.35;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum Tone {
     /// Dark card, light text. The default.
     Dark,

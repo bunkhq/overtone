@@ -1,5 +1,6 @@
 //! Lyrics providers.
 
+pub mod cache;
 pub mod lrclib;
 
 use crate::{Lyrics, Track};

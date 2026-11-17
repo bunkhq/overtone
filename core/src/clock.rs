@@ -25,6 +25,7 @@ pub struct PlaybackClock {
 /// What changed after [`PlaybackClock::report`], so the shell knows whether to
 /// re-arm its progress animation and lyric timer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum ClockChange {
     /// Within jitter tolerance: the position was corrected, but running
     /// animations can carry on. Lyric timers should still be rescheduled.

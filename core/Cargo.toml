@@ -8,20 +8,40 @@ publish = false
 
 [lib]
 name = "overtone_core"
-crate-type = ["rlib", "cdylib"]
+# staticlib: linked into the macOS app. cdylib: the Windows DLL (C ABI in
+# src/ffi.rs), and what uniffi-bindgen reads the Swift interface from.
+crate-type = ["lib", "staticlib", "cdylib"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["bindgen"]
 
 [features]
 default = ["net"]
 # HTTP lyrics providers. Off for builds that only need palette/clock/LRC.
 net = ["dep:ureq", "dep:serde", "dep:serde_json"]
+# UniFFI exports for the Swift shell (src/uniffi_api.rs).
+uniffi = ["dep:uniffi"]
+# The uniffi-bindgen CLI, only needed to generate bindings.
+bindgen = ["uniffi", "uniffi/cli"]
 
 [dependencies]
 unicode-normalization = "0.1"
 ureq = { version = "2.12", features = ["json"], optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
 serde_json = { version = "1", optional = true }
+uniffi = { version = "0.32", optional = true }
 
 [profile.release]
 lto = true
 codegen-units = 1
 strip = true
+
+[[example]]
+name = "lyrics"
+required-features = ["net"]
+
+[[example]]
+name = "cover"
+required-features = ["net"]

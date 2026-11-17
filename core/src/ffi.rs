@@ -92,6 +92,16 @@ pub unsafe extern "C" fn ot_tray_colors(palette: *const OtPalette, dark_taskbar:
     OT_OK
 }
 
+/// `text` with filtered words replaced by asterisks (see `censor.rs`).
+/// `level`: 0 off, 1 slurs only, 2 slurs and swears. Free with `ot_string_free`.
+///
+/// # Safety
+/// `text` must be null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn ot_censor(text: *const c_char, level: i32) -> *mut c_char {
+    into_c(crate::censor::censor(&read_str(text), crate::censor::CensorLevel::from_i32(level)))
+}
+
 /// Strength of that tint, shared so both shells use the same value.
 #[no_mangle]
 pub extern "C" fn ot_flat_tint() -> f32 {

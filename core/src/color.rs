@@ -2,6 +2,7 @@
 
 /// An 8-bit sRGB colour.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct Rgb {
     pub r: u8,
     pub g: u8,

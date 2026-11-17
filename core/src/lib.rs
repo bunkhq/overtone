@@ -8,15 +8,20 @@
 //! - [`palette`]: album artwork (RGBA) to a contrast-safe overlay palette.
 //! - [`lrc`]: LRC parsing and line lookup by playback position.
 //! - [`clock`]: playback position interpolation between OS updates.
+//! - [`censor`]: word filter for published text (the Discord status).
 //! - [`matcher`]: track-name normalisation for lyrics lookups.
+//! - [`uniffi_api`]: UniFFI exports for the Swift shell, behind the `uniffi` feature.
 //! - [`lyrics`]: lyrics providers (LRCLIB), behind the `net` feature.
 //! - [`ffi`]: the C ABI the shells call.
 
 #[cfg(feature = "net")]
 pub mod artwork;
+pub mod censor;
 pub mod clock;
 pub mod color;
 pub mod ffi;
+#[cfg(feature = "uniffi")]
+pub mod uniffi_api;
 pub mod lrc;
 #[cfg(feature = "net")]
 pub mod lyrics;
@@ -28,8 +33,12 @@ pub use color::Rgb;
 pub use lrc::{LyricLine, Lyrics};
 pub use palette::{Palette, Tone};
 
+#[cfg(feature = "uniffi")]
+uniffi::setup_scaffolding!();
+
 /// What the shell knows about the current track, as reported by the OS.
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct Track {
     pub title: String,
     /// Empty when the source sends none (Nintendo Music, Amazon's desktop app).

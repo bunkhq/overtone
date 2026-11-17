@@ -6,6 +6,7 @@
 //! stripped). Empty lines are kept: they mark instrumental gaps.
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct LyricLine {
     pub start_ms: u64,
     /// Empty for an instrumental gap.
