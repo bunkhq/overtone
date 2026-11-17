@@ -1,0 +1,135 @@
+# Builds Overtone for macOS and Windows.
+#
+# Push a tag like v0.1.0: builds both, then creates a draft GitHub release with
+# the downloads attached; review it and press Publish.
+# Run it by hand (Actions > Release > Run workflow): builds both and keeps the
+# downloads as workflow artifacts, no release.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="$(sed -n 's/^version = "\(.*\)"/\1/p' core/Cargo.toml | head -1)-dev.${GITHUB_RUN_NUMBER}"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Version: $version"
+
+  macos:
+    needs: version
+    # Liquid Glass (NSGlassEffectView) needs the macOS 26 SDK.
+    runs-on: macos-26
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust targets
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - name: cmake
+        run: command -v cmake || brew install cmake
+      - name: Core tests
+        run: cargo test --manifest-path core/Cargo.toml
+      - name: Stamp version
+        run: |
+          plutil -replace CFBundleShortVersionString -string "$VERSION" apps/macos/Resources/Info.plist
+          plutil -replace CFBundleVersion -string "$GITHUB_RUN_NUMBER" apps/macos/Resources/Info.plist
+      - name: Build (universal)
+        run: scripts/build-macos.sh --universal
+      - name: App tests
+        run: swift test --package-path apps/macos
+      - name: Zip
+        run: |
+          mkdir -p dist
+          ditto -c -k --sequesterRsrc --keepParent apps/macos/build/Overtone.app "dist/Overtone-$VERSION-macOS.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: dist/*
+          if-no-files-found: error
+
+  windows:
+    needs: version
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            platform: x64
+            rust: x86_64-pc-windows-msvc
+          - arch: arm64
+            platform: ARM64
+            rust: aarch64-pc-windows-msvc
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Rust target
+        run: rustup target add ${{ matrix.rust }}
+      - name: Core tests
+        if: matrix.arch == 'x64'
+        run: cargo test --manifest-path core/Cargo.toml
+      - name: Publish
+        shell: pwsh
+        run: |
+          $out = "publish\win-${{ matrix.arch }}"
+          dotnet publish apps/windows/Overtone/Overtone.csproj -c Release `
+            -r win-${{ matrix.arch }} -p:Platform=${{ matrix.platform }} --self-contained `
+            -p:Version=$($env:VERSION -replace '-.*$','') -p:InformationalVersion=$env:VERSION `
+            -o $out -nologo
+          if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed ($LASTEXITCODE)" }
+          if (-not (Test-Path "$out\overtone_core.dll")) { throw 'overtone_core.dll missing from the publish output' }
+          if (-not (Test-Path "$out\Overtone.exe")) { throw 'Overtone.exe missing from the publish output' }
+      - name: Zip
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Compress-Archive -Path "publish\win-${{ matrix.arch }}\*" -DestinationPath "dist\Overtone-$env:VERSION-Windows-${{ matrix.arch }}.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: [version, macos, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" --draft --generate-notes \
+            --title "Overtone ${{ needs.version.outputs.version }}"

@@ -27,7 +27,9 @@ for arg in "$@"; do
 done
 
 [[ $skip_core == 1 ]] || "$root/scripts/build-core-macos.sh" ${core_args[@]+"${core_args[@]}"}
-[[ $skip_adapter == 1 && -d "$app_src/build/adapter" ]] || "$root/scripts/build-adapter-macos.sh"
+adapter_args=()
+[[ $universal == 1 ]] && adapter_args+=(--universal)
+[[ $skip_adapter == 1 && -d "$app_src/build/adapter" ]] || "$root/scripts/build-adapter-macos.sh" ${adapter_args[@]+"${adapter_args[@]}"}
 
 swift_args=(-c "$config" --package-path "$app_src" --product Overtone)
 [[ $universal == 1 ]] && swift_args+=(--arch arm64 --arch x86_64)
