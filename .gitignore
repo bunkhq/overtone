@@ -20,3 +20,4 @@ Thumbs.db
 /apps/macos/.swiftpm/
 /apps/macos/Frameworks/
 /apps/macos/Sources/OvertoneCore/Generated/
+!core/src/bin/
