@@ -783,7 +783,7 @@ struct BreathingDots: View {
     private func dots(phase: Double?) -> some View {
         HStack(spacing: 5) {
             ForEach(0..<3) { i in
-                let t = phase.map { (sin(($0 - Double(i) * 0.2) * 2 * .pi / 1.6) + 1) / 2 } ?? 1
+                let t = Self.breath(phase, dot: i)
                 Circle()
                     .frame(width: 6, height: 6)
                     .opacity(0.35 + 0.65 * t)
@@ -791,6 +791,14 @@ struct BreathingDots: View {
             }
         }
         .accessibilityLabel("Instrumental")
+    }
+
+    /// 0...1 brightness of dot `dot` at `phase` seconds; 1 when static.
+    /// (A function, not an inline closure: Xcode 26's type checker times out on the closure.)
+    private static func breath(_ phase: Double?, dot: Int) -> Double {
+        guard let phase else { return 1 }
+        let angle: Double = (phase - Double(dot) * 0.2) * 2 * Double.pi / 1.6
+        return (sin(angle) + 1) / 2
     }
 }
 
