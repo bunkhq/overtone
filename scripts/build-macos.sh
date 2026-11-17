@@ -32,9 +32,22 @@ adapter_args=()
 [[ $skip_adapter == 1 && -d "$app_src/build/adapter" ]] || "$root/scripts/build-adapter-macos.sh" ${adapter_args[@]+"${adapter_args[@]}"}
 
 swift_args=(-c "$config" --package-path "$app_src" --product Overtone)
-[[ $universal == 1 ]] && swift_args+=(--arch arm64 --arch x86_64)
-swift build "${swift_args[@]}"
-bin_dir="$(swift build "${swift_args[@]}" --show-bin-path)"
+if [[ $universal == 1 ]]; then
+  # One build per architecture, then lipo: a multi-arch `swift build` goes through
+  # XCBuild, which (Xcode 26) fails to link the static core ("-lovertone_core").
+  # Each slice is copied out at once: newer SwiftPM builds every triple to the same path.
+  bin_dir="$app_src/.build/universal-$config"
+  mkdir -p "$bin_dir"
+  for arch in arm64 x86_64; do
+    triple_args=("${swift_args[@]}" --triple "$arch-apple-macosx14.0")
+    swift build "${triple_args[@]}"
+    cp "$(swift build "${triple_args[@]}" --show-bin-path)/Overtone" "$bin_dir/Overtone-$arch"
+  done
+  lipo -create "$bin_dir/Overtone-arm64" "$bin_dir/Overtone-x86_64" -output "$bin_dir/Overtone"
+else
+  swift build "${swift_args[@]}"
+  bin_dir="$(swift build "${swift_args[@]}" --show-bin-path)"
+fi
 
 app="$app_src/build/Overtone.app"
 rm -rf "$app"
