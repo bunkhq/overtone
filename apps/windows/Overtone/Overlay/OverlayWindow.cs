@@ -91,7 +91,7 @@ public sealed class OverlayWindow : Window
             _hasTrack = has;
             UpdateVisibility();
         };
-        _view.CycleModeRequested += () => SetMode((OverlayMode)(((int)_view.Mode + 1) % 3));
+        _view.CycleModeRequested += CycleMode;
         _view.DesiredSizeChanged += () => { if (!_pressed) AnimateCard(_view.DesiredCardSize); };
         _view.Loaded += (_, _) => _view.XamlRoot.Changed += (_, _) => OnScaleMaybeChanged();
 
@@ -182,6 +182,33 @@ public sealed class OverlayWindow : Window
             UpdateVisibility();
         }
     }
+
+    /// <summary>The overlay's window handle (global hotkeys are registered on it).</summary>
+    public nint Hwnd => _hwnd;
+
+    private bool _ghost;
+
+    /// <summary>
+    /// Ghost mode (tray menu, Ctrl+Alt+Shift+G): the overlay dims and clicks pass
+    /// through it. Not persisted, as on macOS: launching into a click-through overlay
+    /// would look broken.
+    /// </summary>
+    public bool Ghost
+    {
+        get => _ghost;
+        set
+        {
+            if (_ghost == value) return;
+            _ghost = value;
+            if (value) EndDrag();
+            Win32.SetClickThrough(_hwnd, value);
+            _view.SetGhost(value);
+            StateChanged?.Invoke();
+        }
+    }
+
+    /// <summary>The next layout's preset (tray menu, hotkey, double-click).</summary>
+    public void CycleMode() => SetMode((OverlayMode)(((int)_view.Mode + 1) % 3));
 
     /// <summary>Resizes the card to a layout's preset size (tray menu, double-click), animated.</summary>
     /// <param name="anchor">Corner that stays put (0..1 per axis); defaults to the one nearest the screen edges.</param>

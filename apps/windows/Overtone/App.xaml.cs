@@ -13,6 +13,8 @@ public partial class App : Application
     private OverlayWindow? _overlay;
     private Tray? _tray;
     private DiscordPresence? _presence;
+    private HotKeys? _hotKeys;
+    private Updater? _updater;
 
     public App()
     {
@@ -35,14 +37,23 @@ public partial class App : Application
         _overlay = new OverlayWindow(settings, _media, new LyricsService());
         _presence = new DiscordPresence(DispatcherQueue.GetForCurrentThread(), settings);
         _overlay.PresenceChanged += _presence.Update;
-        _tray = new Tray(_overlay, settings, _presence, _media, Quit);
-        _media.TrackChanged += _tray.SetTrack;
+        _updater = new Updater(DispatcherQueue.GetForCurrentThread());
+        _tray = new Tray(_overlay, settings, _presence, _media, _updater, Quit);
+
+        // The same global shortcuts as on macOS, with Ctrl+Alt+Shift.
+        var overlay = _overlay;
+        _hotKeys = new HotKeys(overlay.Hwnd);
+        _hotKeys.Register(HotKeys.ToggleOverlay, () => overlay.UserVisible = !overlay.UserVisible);
+        _hotKeys.Register(HotKeys.Ghost, () => overlay.Ghost = !overlay.Ghost);
+        _hotKeys.Register(HotKeys.CycleLayout, overlay.CycleMode);
 
         await _media.StartAsync();
     }
 
     private void Quit()
     {
+        _hotKeys?.Dispose();
+        _updater?.Dispose();
         _tray?.Dispose();
         _presence?.Dispose();
         _media?.Dispose();

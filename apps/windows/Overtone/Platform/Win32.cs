@@ -8,6 +8,10 @@ internal static class Win32
     private const long WS_EX_TOOLWINDOW = 0x00000080;
     private const long WS_EX_APPWINDOW = 0x00040000;
     private const long WS_EX_NOACTIVATE = 0x08000000;
+    private const long WS_EX_LAYERED = 0x00080000;
+    private const long WS_EX_TRANSPARENT = 0x00000020;
+    private const uint LWA_ALPHA = 0x2;
+    private const uint WM_HOTKEY = 0x0312;
     private const uint SWP_NOSIZE = 0x0001, SWP_NOMOVE = 0x0002, SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010, SWP_FRAMECHANGED = 0x0020;
     private static readonly nint HWND_TOPMOST = -1;
     private const uint WM_NCCALCSIZE = 0x0083;
@@ -37,6 +41,14 @@ internal static class Win32
     [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(nint hwnd, int attr, ref uint value, int size);
     [DllImport("comctl32.dll")] private static extern bool SetWindowSubclass(nint hwnd, SubclassProc proc, nuint id, nuint data);
     [DllImport("comctl32.dll")] private static extern nint DefSubclassProc(nint hwnd, uint msg, nint wParam, nint lParam);
+
+    [DllImport("user32.dll")] private static extern bool SetLayeredWindowAttributes(nint hwnd, uint key, byte alpha, uint flags);
+    [DllImport("user32.dll")] public static extern bool RegisterHotKey(nint hwnd, int id, uint modifiers, uint vk);
+    [DllImport("user32.dll")] public static extern bool UnregisterHotKey(nint hwnd, int id);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int MessageBoxW(nint hwnd, string text, string caption, uint type);
+
+    /// <summary>Raised on the UI thread with the id of a global hotkey registered on the overlay window.</summary>
+    public static event Action<int>? HotKeyPressed;
 
     // Held for the life of the process so the GC never collects the callback.
     private static readonly SubclassProc Proc = OverlayProc;
@@ -83,6 +95,20 @@ internal static class Win32
         SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
     }
 
+    /// <summary>
+    /// Ghost mode: clicks pass through the window to whatever is under it. Only a
+    /// layered window is skipped by hit-testing across processes, so it turns layered
+    /// (fully opaque: the dimming is the XAML content's) while click-through.
+    /// </summary>
+    public static void SetClickThrough(nint hwnd, bool on)
+    {
+        var ex = (long)GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+        ex = on ? ex | WS_EX_LAYERED | WS_EX_TRANSPARENT : ex & ~(WS_EX_LAYERED | WS_EX_TRANSPARENT);
+        SetWindowLongPtr(hwnd, GWL_EXSTYLE, (nint)ex);
+        if (on) SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
+        SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    }
+
     private static unsafe nint OverlayProc(nint hwnd, uint msg, nint wParam, nint lParam, nuint id, nuint data)
     {
         switch (msg)
@@ -91,6 +117,9 @@ internal static class Win32
                 return 0;
             case WM_MOUSEACTIVATE:
                 return MA_NOACTIVATE;
+            case WM_HOTKEY:
+                HotKeyPressed?.Invoke((int)wParam);
+                return 0;
             case WM_WINDOWPOSCHANGING:
                 // The presenter re-applies its own z-order asynchronously after a show,
                 // which can silently drop us out of the topmost band. Own z-order here:

@@ -255,11 +255,39 @@ fn into_c(s: String) -> *mut c_char {
 #[cfg(feature = "net")]
 #[no_mangle]
 pub unsafe extern "C" fn ot_lyrics_lookup(title: *const c_char, artist: *const c_char, album: *const c_char, duration_ms: i64) -> *mut c_char {
-    use crate::lyrics::{lrclib::Lrclib, LyricsProvider, LyricsResult};
+    ot_lyrics_lookup_cached(std::ptr::null(), title, artist, album, duration_ms)
+}
+
+/// [`ot_lyrics_lookup`] through the on-disk cache in `cache_dir` (the same one the
+/// macOS shell uses, `lyrics/cache.rs`): a hit skips the network, and found, not
+/// found and instrumental results are written back. Null or empty `cache_dir`: no cache.
+///
+/// # Safety
+/// String arguments must be null or valid NUL-terminated UTF-8.
+#[cfg(feature = "net")]
+#[no_mangle]
+pub unsafe extern "C" fn ot_lyrics_lookup_cached(
+    cache_dir: *const c_char,
+    title: *const c_char,
+    artist: *const c_char,
+    album: *const c_char,
+    duration_ms: i64,
+) -> *mut c_char {
+    use crate::lyrics::{cache::LyricsCache, lrclib::Lrclib, LyricsProvider, LyricsResult};
     use serde_json::json;
 
     let track = crate::Track { title: read_str(title), artist: read_str(artist), album: read_str(album), duration_ms: u64::try_from(duration_ms).ok() };
-    let value = match Lrclib::default().lookup(&track) {
+    let dir = read_str(cache_dir);
+    let cache = (!dir.is_empty()).then(|| LyricsCache::new(dir));
+    let result = match cache.as_ref().and_then(|c| c.get(&track)) {
+        Some(hit) => Ok(hit),
+        None => Lrclib::default().lookup(&track).inspect(|r| {
+            if let Some(c) = &cache {
+                c.put(&track, r);
+            }
+        }),
+    };
+    let value = match result {
         Ok(LyricsResult::Found(l)) => json!({
             "status": "found",
             "synced": l.synced,

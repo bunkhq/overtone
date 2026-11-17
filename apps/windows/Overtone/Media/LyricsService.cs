@@ -1,4 +1,5 @@
 using Overtone.Core;
+using Overtone.Platform;
 using System.Text.Json;
 
 namespace Overtone.Media;
@@ -51,9 +52,15 @@ public sealed record LyricsDoc(LyricsStatus Status, bool Synced, IReadOnlyList<L
     }
 }
 
-/// <summary>Looks lyrics up through the Rust core (LRCLIB), off the UI thread, with an in-memory cache.</summary>
+/// <summary>
+/// Looks lyrics up through the Rust core (LRCLIB), off the UI thread. An in-memory
+/// cache in front of the core's on-disk one (%LOCALAPPDATA%\Overtone\Cache\lyrics, as
+/// on macOS), so songs played before load without the network.
+/// </summary>
 public sealed class LyricsService
 {
+    private static readonly string CacheDir = Path.Combine(Settings.DataDir, "Cache", "lyrics");
+
     private readonly Dictionary<string, LyricsDoc> _cache = new();
     private readonly object _gate = new();
 
@@ -71,7 +78,7 @@ public sealed class LyricsService
 
         var doc = await Task.Run(() =>
         {
-            using var json = CoreLib.LookupLyrics(track.Title, track.Artist, track.Album, track.DurationMs);
+            using var json = CoreLib.LookupLyrics(CacheDir, track.Title, track.Artist, track.Album, track.DurationMs);
             return Parse(json.RootElement);
         });
 

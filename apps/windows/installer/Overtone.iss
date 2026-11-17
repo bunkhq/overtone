@@ -76,7 +76,9 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"; ValueName: "Overtone"; Flags: deletevalue uninsdeletevalue; Tasks: startup
 
 [Run]
-Filename: "{app}\Overtone.exe"; Description: "Open Overtone"; Flags: nowait postinstall
+Filename: "{app}\Overtone.exe"; Description: "Open Overtone"; Flags: nowait postinstall skipifsilent
+; The in-app updater runs this setup with /SILENT: start the new version when it's done.
+Filename: "{app}\Overtone.exe"; Flags: nowait; Check: WizardSilent
 
 [Code]
 // Overtone lives in the tray with no window to close, so stop it before

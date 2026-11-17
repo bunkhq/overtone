@@ -28,6 +28,10 @@ Get the latest build from [Releases](https://github.com/bunkhq/overtone/releases
 - **macOS 14 or later** (Apple Silicon and Intel): `Overtone-…-macOS.dmg`. Open it and drag Overtone to Applications. The app is not notarised yet, so the first launch is blocked: open System Settings > Privacy & Security and click **Open Anyway**.
 - **Windows 10 (2004) or later**: `Overtone-…-Windows-x64-Setup.exe`, or `…-arm64-Setup.exe` on ARM PCs. It installs for your account, no admin rights. The installer is not signed yet, so SmartScreen may warn: click **More info**, then **Run anyway**. A portable `.zip` of each is attached too.
 
+### Updates
+
+Overtone checks GitHub for a new release shortly after it starts and every six hours. When there is one, it appears at the top of the tray (Windows) or menu bar (macOS) menu: click **Install update** and Overtone downloads it, checks it against the release's `SHA256SUMS`, installs it and restarts, in a few seconds. **Check for updates…** in the same menu checks now. A portable or development copy, or a Mac copy in a folder you can't write to, gets **Download update…**, which opens the release page.
+
 ## Install it on Windows from source
 
 Needs the .NET 10 SDK and a Rust toolchain with the `x86_64-pc-windows-msvc` target. From the repo root:
@@ -46,9 +50,17 @@ dotnet build -c Release -p:Platform=x64      # also builds core/ and copies over
 bin/x64/Release/net10.0-windows10.0.22621.0/Overtone.exe
 ```
 
-Add `-p:SkipCore=true` when only C# changed. The overlay appears when any player reports to Windows; left-click the tray icon to show or hide it, right-click for modes (pill, player card, lyrics) and Quit. Double-click the overlay to cycle modes, or drag its top or bottom edge to resize it into another mode. Drag it anywhere and it snaps to nearby screen edges. The tray menu also switches between the blurred-cover and flat-colour backgrounds.
+Add `-p:SkipCore=true` when only C# changed. The overlay appears when any player reports to Windows; left-click the tray icon to show or hide it. Right-click for the same menu as on macOS: what's playing with play/pause, next and previous; layout (pill, player card, lyrics); ghost mode; tone, background and native look; the coloured tray icon; music only; Discord; start with Windows; updates; About and Quit. Double-click the overlay to cycle layouts, or drag its top or bottom edge to resize it into another one. Drag it anywhere and it snaps to nearby screen edges.
 
-Settings live in `%LOCALAPPDATA%\Overtone\settings.json`; unexpected errors are appended to `errors.log` beside it.
+Global shortcuts (Control-Option-Command on macOS):
+
+| | |
+|---|---|
+| Ctrl+Alt+Shift+O | Show or hide the overlay |
+| Ctrl+Alt+Shift+G | Ghost mode: dim the overlay and let clicks pass through it |
+| Ctrl+Alt+Shift+L | Next layout |
+
+Settings live in `%LOCALAPPDATA%\Overtone\settings.json`; unexpected errors are appended to `errors.log` beside it, and lyrics are cached in `Cache\lyrics`.
 
 ### Test tools
 

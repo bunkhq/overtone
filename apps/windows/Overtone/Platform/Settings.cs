@@ -34,7 +34,9 @@ public enum DiscordStatusLine
 /// <summary>Small persisted state in %LOCALAPPDATA%\Overtone\settings.json.</summary>
 public sealed class Settings
 {
-    private static readonly string Dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Overtone");
+    /// <summary>%LOCALAPPDATA%\Overtone: settings, the error log and caches.</summary>
+    public static readonly string DataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Overtone");
+    private static readonly string Dir = DataDir;
     private static readonly string FilePath = Path.Combine(Dir, "settings.json");
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true, Converters = { new JsonStringEnumConverter() } };
 
@@ -58,6 +60,9 @@ public sealed class Settings
     /// Acrylic tinted with the album colour, Fluent icons. Off: Overtone's own drawn card.
     /// </summary>
     public bool NativeLook { get; set; } = true;
+
+    /// <summary>Tray icon in the track's colours (tray menu, on by default). Off: the brand icon always.</summary>
+    public bool ColorTrayIcon { get; set; } = true;
 
     /// <summary>Show only music: videos and other media in browsers and players are ignored (tray menu).</summary>
     public bool MusicOnly { get; set; } = true;

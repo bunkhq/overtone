@@ -2,7 +2,8 @@
 #
 # Push a tag like v0.1.0: builds both, then creates a draft GitHub release with
 # the downloads attached (macOS .dmg; Windows setup .exe and portable .zip for
-# x64 and ARM64); review it and press Publish.
+# x64 and ARM64; SHA256SUMS); review it and press Publish. Publishing it is what
+# offers the update in the apps: they read /releases/latest, which skips drafts.
 # Run it by hand (Actions > Release > Run workflow): builds both and keeps the
 # downloads as workflow artifacts, no release.
 name: Release
@@ -135,6 +136,10 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+      # The in-app updaters check the download they're about to install against this.
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum -- * > SHA256SUMS && cat SHA256SUMS
       - name: Draft release
         env:
           GH_TOKEN: ${{ github.token }}

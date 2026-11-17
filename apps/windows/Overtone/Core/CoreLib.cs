@@ -28,7 +28,8 @@ internal static unsafe partial class CoreLib
     [DllImport(Dll)] internal static extern int ot_clock_report(nint clock, ulong positionMs, ulong reportedAtMs, byte playing, double rate, ulong nowMs);
     [DllImport(Dll)] internal static extern ulong ot_clock_position(nint clock, ulong nowMs);
     [DllImport(Dll)] internal static extern long ot_clock_wall_ms_until(nint clock, ulong targetMs, ulong nowMs);
-    [DllImport(Dll)] private static extern nint ot_lyrics_lookup(
+    [DllImport(Dll)] private static extern nint ot_lyrics_lookup_cached(
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string? cacheDir,
         [MarshalAs(UnmanagedType.LPUTF8Str)] string title,
         [MarshalAs(UnmanagedType.LPUTF8Str)] string artist,
         [MarshalAs(UnmanagedType.LPUTF8Str)] string album,
@@ -126,10 +127,10 @@ internal static unsafe partial class CoreLib
         }
     }
 
-    /// <summary>Blocking LRCLIB lookup. Call off the UI thread.</summary>
-    public static JsonDocument LookupLyrics(string title, string artist, string album, long? durationMs)
+    /// <summary>Blocking LRCLIB lookup through the on-disk cache in <paramref name="cacheDir"/> (null: none). Call off the UI thread.</summary>
+    public static JsonDocument LookupLyrics(string? cacheDir, string title, string artist, string album, long? durationMs)
     {
-        var ptr = ot_lyrics_lookup(title, artist, album, durationMs ?? -1);
+        var ptr = ot_lyrics_lookup_cached(cacheDir, title, artist, album, durationMs ?? -1);
         try
         {
             return JsonDocument.Parse(Marshal.PtrToStringUTF8(ptr) ?? """{"status":"error","error":"null"}""");

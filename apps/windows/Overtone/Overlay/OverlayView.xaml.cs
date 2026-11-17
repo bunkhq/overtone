@@ -662,6 +662,19 @@ public sealed partial class OverlayView : UserControl
         Motion.Fade(ShadowHost, 1, ms, 0);
     }
 
+    /// <summary>Opacity of the whole overlay in ghost mode, as on macOS.</summary>
+    public const double GhostOpacity = 0.55;
+
+    /// <summary>
+    /// Ghost mode's dimming, on the XAML root so it multiplies with the composition
+    /// fades of Appear and Disappear rather than fighting them.
+    /// </summary>
+    public void SetGhost(bool ghost)
+    {
+        Root.OpacityTransition ??= new ScalarTransition { Duration = TimeSpan.FromMilliseconds(Motion.Reduced ? 150 : 200) };
+        Root.Opacity = ghost ? GhostOpacity : 1;
+    }
+
     /// <summary>Fades the card out, then runs <paramref name="then"/>.</summary>
     public void Disappear(Action then)
     {

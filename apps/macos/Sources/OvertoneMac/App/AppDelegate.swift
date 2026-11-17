@@ -17,6 +17,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
     private var statusItem: NSStatusItem?
     private var hotKeys: HotKeys?
     private var discord: DiscordPresence?
+    private let updater = Updater()
     private lazy var musicGate = MusicGate(settings: settings) { [weak self] in self?.model.ingest($0) }
     private var signalSources: [DispatchSourceSignal] = []
 
@@ -32,6 +33,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         observeTone()
         handleTerminationSignals()
         startSource()
+        updater.start()
     }
 
     /// `kill`, logout and Ctrl-C under `swift run` send signals that skip
@@ -151,6 +153,16 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         menu.removeAllItems()
         let info = model.info
 
+        if let update = updater.available {
+            let title = updater.installing ? "Installing Overtone \(update.version)…"
+                : Updater.canInstallInPlace ? "Install Update: Overtone \(update.version)"
+                : "Download Update: Overtone \(update.version)…"
+            menu.addItem(item(title, enabled: !updater.installing) { [weak self] in
+                Task { await self?.updater.install() }
+            })
+            menu.addItem(.separator())
+        }
+
         if let info {
             let header = NSMenuItem(title: info.title, action: nil, keyEquivalent: "")
             header.attributedTitle = NSAttributedString(string: info.title, attributes: [.font: NSFont.menuFont(ofSize: 0).bold])
@@ -221,6 +233,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         menu.addItem(item("Open at Login", enabled: canLogin, checked: canLogin && SMAppService.mainApp.status == .enabled) {
             Self.toggleLoginItem()
         })
+        if updater.available == nil {
+            menu.addItem(item("Check for Updates…") { [weak self] in
+                Task { await self?.updater.check(manual: true) }
+            })
+        }
         menu.addItem(item("About Overtone") {
             NSApp.activate()
             NSApp.orderFrontStandardAboutPanel(nil)
