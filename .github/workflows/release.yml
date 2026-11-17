@@ -1,7 +1,8 @@
 # Builds Overtone for macOS and Windows.
 #
 # Push a tag like v0.1.0: builds both, then creates a draft GitHub release with
-# the downloads attached; review it and press Publish.
+# the downloads attached (macOS .dmg; Windows setup .exe and portable .zip for
+# x64 and ARM64); review it and press Publish.
 # Run it by hand (Actions > Release > Run workflow): builds both and keeps the
 # downloads as workflow artifacts, no release.
 name: Release
@@ -58,10 +59,8 @@ jobs:
         run: scripts/build-macos.sh --universal
       - name: App tests
         run: swift test --package-path apps/macos
-      - name: Zip
-        run: |
-          mkdir -p dist
-          ditto -c -k --sequesterRsrc --keepParent apps/macos/build/Overtone.app "dist/Overtone-$VERSION-macOS.zip"
+      - name: Disk image
+        run: scripts/package-dmg-macos.sh apps/macos/build/Overtone.app "dist/Overtone-$VERSION-macOS.dmg"
       - uses: actions/upload-artifact@v4
         with:
           name: macos
@@ -104,11 +103,21 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed ($LASTEXITCODE)" }
           if (-not (Test-Path "$out\overtone_core.dll")) { throw 'overtone_core.dll missing from the publish output' }
           if (-not (Test-Path "$out\Overtone.exe")) { throw 'Overtone.exe missing from the publish output' }
-      - name: Zip
+      - name: Setup
         shell: pwsh
         run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress | Out-Null }
+          if (-not (Test-Path $iscc)) { throw "Inno Setup not found at $iscc" }
           New-Item -ItemType Directory -Force dist | Out-Null
-          Compress-Archive -Path "publish\win-${{ matrix.arch }}\*" -DestinationPath "dist\Overtone-$env:VERSION-Windows-${{ matrix.arch }}.zip"
+          $src = Resolve-Path "publish\win-${{ matrix.arch }}"
+          $out = Resolve-Path dist
+          & $iscc /Q "/DAppVersion=$env:VERSION" "/DNumVersion=$($env:VERSION -replace '-.*$','')" "/DArch=${{ matrix.arch }}" "/DSourceDir=$src" "/DOutputDir=$out" apps\windows\installer\Overtone.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed ($LASTEXITCODE)" }
+      - name: Portable zip
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "publish\win-${{ matrix.arch }}\*" -DestinationPath "dist\Overtone-$env:VERSION-Windows-${{ matrix.arch }}-portable.zip"
       - uses: actions/upload-artifact@v4
         with:
           name: windows-${{ matrix.arch }}

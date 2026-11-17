@@ -21,7 +21,14 @@ design/          concept board, icon masters
 docs/            architecture and compatibility
 ```
 
-## Install it on Windows
+## Download
+
+Get the latest build from [Releases](https://github.com/bunkhq/overtone/releases/latest):
+
+- **macOS 14 or later** (Apple Silicon and Intel): `Overtone-…-macOS.dmg`. Open it and drag Overtone to Applications. The app is not notarised yet, so the first launch is blocked: open System Settings > Privacy & Security and click **Open Anyway**.
+- **Windows 10 (2004) or later**: `Overtone-…-Windows-x64-Setup.exe`, or `…-arm64-Setup.exe` on ARM PCs. It installs for your account, no admin rights. The installer is not signed yet, so SmartScreen may warn: click **More info**, then **Run anyway**. A portable `.zip` of each is attached too.
+
+## Install it on Windows from source
 
 Needs the .NET 10 SDK and a Rust toolchain with the `x86_64-pc-windows-msvc` target. From the repo root:
 
