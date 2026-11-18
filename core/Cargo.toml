@@ -1,6 +1,6 @@
 [package]
 name = "overtone-core"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "Shared logic for Overtone: palette engine, lyrics, playback clock"
 license = "MIT"

@@ -28,6 +28,12 @@ public sealed class Updater : IDisposable
     /// <summary>Where the setup installs (installer/Overtone.iss DefaultDirName, scripts/install-windows.ps1).</summary>
     private static readonly string InstallDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Overtone");
 
+    /// <summary>This build's version, as stamped by the release workflow (InformationalVersion, without build metadata).</summary>
+    public static string CurrentVersion { get; } =
+        (Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0").Split('+')[0];
+
+    // After CurrentVersion: static initializers run in source order, and CreateClient
+    // puts the version in the User-Agent (a null one makes ParseAdd throw at startup).
     private static readonly HttpClient Http = CreateClient();
 
     private readonly DispatcherQueue _ui;
@@ -46,10 +52,6 @@ public sealed class Updater : IDisposable
         };
         _timer.Start();
     }
-
-    /// <summary>This build's version, as stamped by the release workflow (InformationalVersion, without build metadata).</summary>
-    public static string CurrentVersion { get; } =
-        (Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0").Split('+')[0];
 
     /// <summary>The newer release found by the last check, or null.</summary>
     public UpdateRelease? Available { get; private set; }
