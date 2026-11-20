@@ -19,7 +19,7 @@ pub const NOT_FOUND_TTL: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 /// Durations within the same bucket share an entry (releases differ by a second or two).
 const DURATION_BUCKET_S: u64 = 4;
 /// Bump when the entry format or matching changes, so old entries are ignored.
-const VERSION: u32 = 1;
+const VERSION: u32 = 2;
 
 #[derive(Serialize, Deserialize)]
 struct Entry {

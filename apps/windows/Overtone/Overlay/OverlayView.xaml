@@ -25,6 +25,14 @@
             <Rectangle x:Name="Scrim" Fill="{StaticResource ScrimBrush}" />
             <Rectangle x:Name="Tint" Fill="{StaticResource TintBrush}" Visibility="Collapsed" />
             <Border x:Name="Rim" BorderThickness="1" BorderBrush="{StaticResource RimBrush}" />
+            <!-- No background: while dragged or resized, a see-through box shows the overlay's extent (OverlayView.ShowBounds). -->
+            <Border x:Name="Bounds" BorderThickness="1" Background="#40808080" BorderBrush="#99FFFFFF"
+                    IsHitTestVisible="False" Visibility="Collapsed" />
+            <!-- No background: a halo behind every glyph (OverlayView.ApplyHalo), so text reads on any desktop. -->
+            <Grid x:Name="Halo" IsHitTestVisible="False" Visibility="Collapsed" />
+
+            <!-- One element around the three layouts, so the halo can be cast from all of them at once. -->
+            <Grid x:Name="Layouts">
 
             <!-- Layouts stretch to the card: the window sets its size freely and the
                  height picks the layout (OverlayView.LayoutFor). -->
@@ -159,6 +167,7 @@
                     </StackPanel>
                     <local:TransportBar x:Name="LyricsTransport" Grid.Column="2" Margin="0,0,-4,0" />
                 </Grid>
+            </Grid>
             </Grid>
         </Grid>
     </Grid>

@@ -50,15 +50,16 @@ dotnet build -c Release -p:Platform=x64      # also builds core/ and copies over
 bin/x64/Release/net10.0-windows10.0.22621.0/Overtone.exe
 ```
 
-Add `-p:SkipCore=true` when only C# changed. The overlay appears when any player reports to Windows; left-click the tray icon to show or hide it. Right-click for the same menu as on macOS: what's playing with play/pause, next and previous; layout (pill, player card, lyrics); ghost mode; tone, background and native look; the coloured tray icon; music only; Discord; start with Windows; updates; About and Quit. Double-click the overlay to cycle layouts, or drag its top or bottom edge to resize it into another one. Drag it anywhere and it snaps to nearby screen edges.
+Add `-p:SkipCore=true` when only C# changed. The overlay appears when any player reports to Windows; left-click the tray icon to show or hide it. Right-click the tray icon or the overlay (or press Ctrl+Alt+Shift+M) for the tray menu, coloured like the overlay: what's playing with play/pause, next and previous; switches for the overlay, lyrics only, ghost mode, the native look and Discord; the layout as pills on its row; then **Background** (with no background, the text is black or white, dark over light screens and light over dark ones; switches there add the album's colours or remove the text shadow), **Tone**, Discord's **Shows** and **Word filter**, and **More settings** (snap to screen edges, dim in ghost mode, music only, start with Windows, the coloured tray icon, updates, About), each a flyout that opens beside its row when you rest on it or click it; Quit at the bottom. Settings leave the menu open. Click away or press Esc to close it. Double-click the overlay to cycle layouts, or drag its top or bottom edge to resize it into another one. Drag it anywhere and it snaps to nearby screen edges (unless snapping is off).
 
 Global shortcuts (Control-Option-Command on macOS):
 
 | | |
 |---|---|
 | Ctrl+Alt+Shift+O | Show or hide the overlay |
-| Ctrl+Alt+Shift+G | Ghost mode: dim the overlay and let clicks pass through it |
+| Ctrl+Alt+Shift+G | Ghost mode: dim the overlay and let clicks pass through it (on Windows the play/pause, next and previous buttons stay clickable) |
 | Ctrl+Alt+Shift+L | Next layout |
+| Ctrl+Alt+Shift+M | Open the tray menu (Windows) |
 
 Settings live in `%LOCALAPPDATA%\Overtone\settings.json`; unexpected errors are appended to `errors.log` beside it, and lyrics are cached in `Cache\lyrics`.
 

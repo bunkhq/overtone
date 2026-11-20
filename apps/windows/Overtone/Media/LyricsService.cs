@@ -66,11 +66,12 @@ public sealed class LyricsService
 
     public async Task<LyricsDoc> GetAsync(TrackInfo track)
     {
-        if (string.IsNullOrWhiteSpace(track.Title) || string.IsNullOrWhiteSpace(track.Artist))
+        // Without an artist the core can still match on title and album (local files).
+        if (string.IsNullOrWhiteSpace(track.Title) || string.IsNullOrWhiteSpace(track.Byline))
             return LyricsDoc.NotFound;
 
         // Durations differ by a second or two across reports; bucket them.
-        var key = $"{track.Artist}\u0001{track.Title}\u0001{(track.DurationMs ?? 0) / 4000}";
+        var key = $"{track.Artist}\u0001{track.Album}\u0001{track.Title}\u0001{(track.DurationMs ?? 0) / 4000}";
         lock (_gate)
         {
             if (_cache.TryGetValue(key, out var hit)) return hit;

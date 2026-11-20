@@ -14,26 +14,38 @@ public sealed class PaletteTheme
 {
     private const int Roles = 6; // base, accent, ink, inkSoft, inkFaint, title
 
-    private readonly SolidColorBrush _base = Brush("BaseBrush"), _scrim = Brush("ScrimBrush"), _accent = Brush("AccentBrush"),
-        _ink = Brush("InkBrush"), _inkSoft = Brush("InkSoftBrush"), _inkFaint = Brush("InkFaintBrush"), _title = Brush("TitleBrush"),
-        _track = Brush("TrackBrush"), _hover = Brush("HoverBrush"), _pressed = Brush("PressedBrush"),
-        _rim = Brush("RimBrush"), _placeholder = Brush("PlaceholderBrush");
+    private readonly SolidColorBrush _base, _scrim, _accent, _ink, _inkSoft, _inkFaint, _title, _track, _hover, _pressed, _rim, _placeholder;
 
-    // Flat mode: the base colour, warmed toward the accent in the top-left corner.
-    private readonly LinearGradientBrush _tint = (LinearGradientBrush)Application.Current.Resources["TintBrush"];
+    // Flat mode: the base colour, warmed toward the accent in the top-left corner (the overlay only).
+    private readonly LinearGradientBrush? _tint;
 
     private readonly uint[] _now = new uint[Roles];
     private uint[] _from = new uint[Roles], _to = new uint[Roles];
     private DateTime _start;
     private bool _running;
 
-    public PaletteTheme()
+    /// <summary>
+    /// Drives the palette brushes in <paramref name="brushes"/> (the app's, by default).
+    /// Each window gets its own set: one brush recoloured every frame while drawn in two
+    /// windows crashes WinUI, so the tray panel keeps a copy and its own theme.
+    /// </summary>
+    public PaletteTheme(ResourceDictionary? brushes = null)
     {
+        var res = brushes ?? Application.Current.Resources;
+        SolidColorBrush Brush(string key) => (SolidColorBrush)res[key];
+        (_base, _scrim, _accent, _ink, _inkSoft, _inkFaint) =
+            (Brush("BaseBrush"), Brush("ScrimBrush"), Brush("AccentBrush"), Brush("InkBrush"), Brush("InkSoftBrush"), Brush("InkFaintBrush"));
+        (_title, _track, _hover, _pressed, _rim, _placeholder) =
+            (Brush("TitleBrush"), Brush("TrackBrush"), Brush("HoverBrush"), Brush("PressedBrush"), Brush("RimBrush"), Brush("PlaceholderBrush"));
+        _tint = res.TryGetValue("TintBrush", out var tint) ? tint as LinearGradientBrush : null;
         var neutral = CoreLib.Palette([], 0, 0);
         Apply(neutral, animate: false);
     }
 
     public OtPalette Current { get; private set; }
+
+    /// <summary>No card under the text (background None): set before <c>Apply</c>.</summary>
+    public bool Floating { get; set; }
 
     public void Apply(OtPalette p, bool animate)
     {
@@ -81,16 +93,20 @@ public sealed class PaletteTheme
         _scrim.Color = Rgb(c[0], 204);
         // Hue and chroma move toward the accent, lightness stays: inks keep their
         // contrast on the tinted corner (core test flat_tint_corner_keeps_ink_contrast).
-        _tint.GradientStops[0].Color = Rgb(CoreLib.FlatTint(c[0], c[1]));
-        _tint.GradientStops[1].Color = Rgb(c[0]);
+        if (_tint is { } tint)
+        {
+            tint.GradientStops[0].Color = Rgb(CoreLib.FlatTint(c[0], c[1]));
+            tint.GradientStops[1].Color = Rgb(c[0]);
+        }
         _accent.Color = Rgb(c[1]);
         _ink.Color = Rgb(ink);
         _inkSoft.Color = Rgb(c[3]);
         _inkFaint.Color = Rgb(c[4]);
         _title.Color = Rgb(c[5]);
         // Unfilled progress: a grey wash on a dark card, a lighter band on a light one
-        // (as on a pale sleeve, where the empty track reads paler than the ground).
-        _track.Color = Current.IsLight ? Rgb(0xFFFFFF, 140) : Rgb(ink, 61); // 55 % white / 24 % ink
+        // (as on a pale sleeve, where the empty track reads paler than the ground). With
+        // no card, a white band would vanish on a light screen: the ink wash either way.
+        _track.Color = Current.IsLight && !Floating ? Rgb(0xFFFFFF, 140) : Rgb(ink, 61); // 55 % white / 24 % ink
         _hover.Color = Rgb(ink, 31);   // 12 %
         _pressed.Color = Rgb(ink, 51); // 20 %
         _rim.Color = Rgb(ink, 20);     // 8 %
@@ -108,5 +124,4 @@ public sealed class PaletteTheme
 
     private static Color Rgb(uint c, byte a = 255) => Color.FromArgb(a, (byte)(c >> 16), (byte)(c >> 8), (byte)c);
 
-    private static SolidColorBrush Brush(string key) => (SolidColorBrush)Application.Current.Resources[key];
 }

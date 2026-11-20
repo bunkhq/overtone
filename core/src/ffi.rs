@@ -130,7 +130,7 @@ pub unsafe extern "C" fn ot_palette_from_rgba(rgba: *const u8, len: usize, width
         _ => None,
     };
     let palette = if rgba.is_null() || len == 0 {
-        Palette::neutral()
+        Palette::neutral_with_tone(force)
     } else {
         let px = std::slice::from_raw_parts(rgba, len);
         Palette::from_rgba_with_tone(px, width as usize, height as usize, force)
@@ -273,7 +273,7 @@ pub unsafe extern "C" fn ot_lyrics_lookup_cached(
     album: *const c_char,
     duration_ms: i64,
 ) -> *mut c_char {
-    use crate::lyrics::{cache::LyricsCache, lrclib::Lrclib, LyricsProvider, LyricsResult};
+    use crate::lyrics::{cache::LyricsCache, Chain, LyricsProvider, LyricsResult};
     use serde_json::json;
 
     let track = crate::Track { title: read_str(title), artist: read_str(artist), album: read_str(album), duration_ms: u64::try_from(duration_ms).ok() };
@@ -281,7 +281,7 @@ pub unsafe extern "C" fn ot_lyrics_lookup_cached(
     let cache = (!dir.is_empty()).then(|| LyricsCache::new(dir));
     let result = match cache.as_ref().and_then(|c| c.get(&track)) {
         Some(hit) => Ok(hit),
-        None => Lrclib::default().lookup(&track).inspect(|r| {
+        None => Chain::default().lookup(&track).inspect(|r| {
             if let Some(c) = &cache {
                 c.put(&track, r);
             }
@@ -311,6 +311,47 @@ pub unsafe extern "C" fn ot_lyrics_lookup_cached(
 pub unsafe extern "C" fn ot_cover_url(title: *const c_char, artist: *const c_char, album: *const c_char, duration_ms: i64) -> *mut c_char {
     let track = crate::Track { title: read_str(title), artist: read_str(artist), album: read_str(album), duration_ms: u64::try_from(duration_ms).ok() };
     into_c(crate::artwork::cover_url(&track).ok().flatten().unwrap_or_default())
+}
+
+/// The catalogue cover (iTunes, Deezer) that looks most like the local artwork
+/// (`rgba`: straight RGBA, `width`×`height`), for Discord Rich Presence. Blocking:
+/// call off the UI thread. Returns JSON, never null:
+///
+/// ```json
+/// {"status":"match","url":"https://...","source":"song","distance":0.018}
+/// {"status":"none"}            // nothing looks like it: show the local cover another way
+/// {"status":"error","error":"..."}
+/// ```
+///
+/// # Safety
+/// String arguments must be null or valid NUL-terminated UTF-8; `rgba` must be
+/// null or point to `len` readable bytes.
+#[cfg(feature = "net")]
+#[no_mangle]
+pub unsafe extern "C" fn ot_cover_like(
+    title: *const c_char,
+    artist: *const c_char,
+    album: *const c_char,
+    duration_ms: i64,
+    rgba: *const u8,
+    len: usize,
+    width: u32,
+    height: u32,
+) -> *mut c_char {
+    use serde_json::json;
+    let track = crate::Track { title: read_str(title), artist: read_str(artist), album: read_str(album), duration_ms: u64::try_from(duration_ms).ok() };
+    let px: &[u8] = if rgba.is_null() || len == 0 { &[] } else { std::slice::from_raw_parts(rgba, len) };
+    let value = match crate::artwork::cover_like(&track, px, width, height) {
+        Ok(Some(m)) => json!({
+            "status": "match",
+            "url": m.url,
+            "source": format!("{:?}", m.source).to_lowercase(),
+            "distance": m.distance,
+        }),
+        Ok(None) => json!({ "status": "none" }),
+        Err(e) => json!({ "status": "error", "error": e }),
+    };
+    into_c(value.to_string())
 }
 
 /// Whether a music catalog (iTunes, Deezer) knows this song: 1 yes, 0 no, -1 when

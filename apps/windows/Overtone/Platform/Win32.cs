@@ -30,6 +30,27 @@ internal static class Win32
     [StructLayout(LayoutKind.Sequential)]
     public struct POINT { public int X, Y; }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct PROCESS_POWER_THROTTLING_STATE { public uint Version, ControlMask, StateMask; }
+
+    [DllImport("kernel32.dll")] private static extern nint GetCurrentProcess();
+    [DllImport("kernel32.dll")] private static extern bool SetProcessInformation(nint process, int infoClass, ref PROCESS_POWER_THROTTLING_STATE info, uint size);
+
+    /// <summary>
+    /// The overlay never has focus, so Windows 11 counts it as background work and may put
+    /// it on EcoQoS (efficiency cores, low clocks) and coarsen its timers: lyric glides and
+    /// line changes then hitch while the rest of the machine is fine. Opting out of both
+    /// throttles (execution speed, timer resolution) keeps them on time; the app is idle
+    /// between frames anyway, so the power cost is small.
+    /// </summary>
+    public static void OptOutOfThrottling()
+    {
+        const int ProcessPowerThrottling = 4;
+        const uint ExecutionSpeed = 0x1, IgnoreTimerResolution = 0x4;
+        var state = new PROCESS_POWER_THROTTLING_STATE { Version = 1, ControlMask = ExecutionSpeed | IgnoreTimerResolution, StateMask = 0 };
+        SetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling, ref state, (uint)Marshal.SizeOf<PROCESS_POWER_THROTTLING_STATE>());
+    }
+
     private delegate nint SubclassProc(nint hwnd, uint msg, nint wParam, nint lParam, nuint id, nuint data);
 
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] private static extern nint GetWindowLongPtr(nint hwnd, int index);
@@ -108,6 +129,146 @@ internal static class Win32
         if (on) SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
         SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
     }
+
+    /// <summary>
+    /// Ghost mode with live controls: while the pointer is over a control the window
+    /// takes clicks again. Only the transparent bit flips (the window stays layered),
+    /// and hit-testing reads it live, so no frame change is needed.
+    /// </summary>
+    public static void SetHitThrough(nint hwnd, bool through)
+    {
+        var ex = (long)GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+        var want = through ? ex | WS_EX_TRANSPARENT : ex & ~WS_EX_TRANSPARENT;
+        if (want != ex) SetWindowLongPtr(hwnd, GWL_EXSTYLE, (nint)want);
+    }
+
+    /// <summary>
+    /// Whole-window opacity (0-255), for fading the native-look window, whose frame,
+    /// shadow and Acrylic are drawn by Windows and so can't fade with the content.
+    /// Makes the window layered; <see cref="EndAlpha"/> undoes that.
+    /// </summary>
+    public static void SetAlpha(nint hwnd, byte alpha)
+    {
+        var ex = (long)GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+        if ((ex & WS_EX_LAYERED) == 0) SetWindowLongPtr(hwnd, GWL_EXSTYLE, (nint)(ex | WS_EX_LAYERED));
+        SetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA);
+    }
+
+    /// <summary>Fully opaque again; the window stays layered while click-through (ghost mode) needs it.</summary>
+    public static void EndAlpha(nint hwnd, bool keepLayered)
+    {
+        SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
+        if (keepLayered) return;
+        var ex = (long)GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+        if ((ex & WS_EX_LAYERED) != 0) SetWindowLongPtr(hwnd, GWL_EXSTYLE, (nint)(ex & ~WS_EX_LAYERED));
+    }
+
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(nint hwnd);
+    [DllImport("user32.dll")] private static extern nint SetFocus(nint hwnd);
+    [DllImport("user32.dll")] private static extern nint GetForegroundWindow();
+    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(nint hwnd, out uint pid);
+
+    public static nint GetForeground() => GetForegroundWindow();
+
+    /// <summary>True when the foreground window belongs to this process (a popup of ours, say).</summary>
+    public static bool ForegroundIsOurs()
+    {
+        var fg = GetForegroundWindow();
+        if (fg == 0) return false;
+        GetWindowThreadProcessId(fg, out var pid);
+        return pid == (uint)Environment.ProcessId;
+    }
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern nint FindWindowExW(nint parent, nint after, string cls, string? title);
+
+    /// <summary>
+    /// Gives Win32 keyboard focus to the window's XAML content (its child "site bridge"
+    /// window). A WinUI window activated from code is foreground but its content may
+    /// not hold focus, so keys go nowhere until the first click.
+    /// </summary>
+    public static void FocusContent(nint hwnd)
+    {
+        var site = FindWindowExW(hwnd, 0, "Microsoft.UI.Content.DesktopChildSiteBridge", null);
+        SetFocus(site != 0 ? site : hwnd);
+    }
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern nint FindWindowW(string cls, string? title);
+    [DllImport("user32.dll")] private static extern bool GetWindowRect(nint hwnd, out RECT r);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RECT { public int Left, Top, Right, Bottom; }
+
+    /// <summary>
+    /// The notification area's end of the primary taskbar (bottom-right for a bottom
+    /// taskbar), where a tray flyout opens from; null if there is no taskbar.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NOTIFYICONIDENTIFIER
+    {
+        public uint cbSize;
+        public nint hWnd;
+        public uint uID;
+        public Guid guidItem;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct SIZE { public int cx, cy; }
+
+    [DllImport("shell32.dll")] private static extern int Shell_NotifyIconGetRect(ref NOTIFYICONIDENTIFIER id, out RECT r);
+    [DllImport("user32.dll")] private static extern bool CalculatePopupWindowPosition(ref POINT anchor, ref SIZE size, uint flags, ref RECT exclude, out RECT pos);
+
+    public const uint TPM_CENTERALIGN = 0x0004, TPM_RIGHTALIGN = 0x0008, TPM_BOTTOMALIGN = 0x0020,
+        TPM_VERTICAL = 0x0040, TPM_WORKAREA = 0x10000;
+
+    /// <summary>The tray icon's rectangle on screen (in the taskbar or the overflow box), or null.</summary>
+    public static RECT? IconRect(Guid id, nint hwnd)
+    {
+        var nid = new NOTIFYICONIDENTIFIER { cbSize = (uint)Marshal.SizeOf<NOTIFYICONIDENTIFIER>(), hWnd = hwnd, guidItem = id };
+        return Shell_NotifyIconGetRect(ref nid, out var r) == 0 && r.Right > r.Left ? r : null;
+    }
+
+    /// <summary>
+    /// Where a context menu of <paramref name="width"/> × <paramref name="height"/> goes
+    /// when opened at <paramref name="anchor"/>: Windows' own menu placement, which flips
+    /// to fit the work area and keeps clear of <paramref name="exclude"/>.
+    /// </summary>
+    public static RECT PopupPosition(POINT anchor, int width, int height, uint flags, RECT exclude)
+    {
+        var size = new SIZE { cx = width, cy = height };
+        if (CalculatePopupWindowPosition(ref anchor, ref size, flags | TPM_WORKAREA, ref exclude, out var pos)) return pos;
+        return new RECT { Left = anchor.X, Top = anchor.Y - height, Right = anchor.X + width, Bottom = anchor.Y };
+    }
+
+    public static POINT? TrayCorner()
+    {
+        var bar = FindWindowW("Shell_TrayWnd", null);
+        if (bar == 0 || !GetWindowRect(bar, out var r)) return null;
+        return new POINT { X = r.Right - 1, Y = r.Bottom - 1 };
+    }
+
+    private const uint WM_NCHITTEST = 0x0084;
+    private const nint HTCLIENT = 1;
+    private static readonly SubclassProc PanelProcRef = PanelProc;
+
+    /// <summary>
+    /// The tray panel: a tool window (no taskbar button) that does take focus, so the
+    /// keyboard reaches it and clicking away closes it. Windows draws its frame (shadow,
+    /// 1 px border, rounded corners) with a zero-width non-client area, as in the
+    /// overlay's native look, and every point of it is client, so it never shows
+    /// resize cursors.
+    /// </summary>
+    public static void MakePanel(nint hwnd)
+    {
+        var ex = (long)GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+        SetWindowLongPtr(hwnd, GWL_EXSTYLE, (nint)((ex | WS_EX_TOOLWINDOW) & ~WS_EX_APPWINDOW));
+        SetWindowSubclass(hwnd, PanelProcRef, 2, 0);
+        SetNativeFrame(hwnd, true);
+    }
+
+    private static nint PanelProc(nint hwnd, uint msg, nint wParam, nint lParam, nuint id, nuint data) => msg switch
+    {
+        WM_NCCALCSIZE when wParam != 0 => 0,
+        WM_NCHITTEST => HTCLIENT,
+        _ => DefSubclassProc(hwnd, msg, wParam, lParam),
+    };
 
     private static unsafe nint OverlayProc(nint hwnd, uint msg, nint wParam, nint lParam, nuint id, nuint data)
     {

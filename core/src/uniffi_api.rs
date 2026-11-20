@@ -166,7 +166,7 @@ pub use net::*;
 #[cfg(feature = "net")]
 mod net {
     use super::LyricsDoc;
-    use crate::lyrics::{cache::LyricsCache, lrclib::Lrclib, LyricsError, LyricsProvider, LyricsResult};
+    use crate::lyrics::{cache::LyricsCache, Chain, LyricsError, LyricsProvider, LyricsResult};
     use crate::Track;
     use std::sync::Arc;
 
@@ -228,10 +228,10 @@ mod net {
         crate::artwork::is_catalog_song(&track).ok()
     }
 
-    /// LRCLIB lookups with an optional on-disk cache.
+    /// Lyrics lookups (LRCLIB, then NetEase) with an optional on-disk cache.
     #[derive(uniffi::Object)]
     pub struct LyricsClient {
-        provider: Lrclib,
+        provider: Chain,
         cache: Option<LyricsCache>,
     }
 
@@ -240,7 +240,7 @@ mod net {
         /// `cache_dir`: where to keep cached lookups, or `None` for no cache.
         #[uniffi::constructor]
         pub fn new(cache_dir: Option<String>) -> Arc<Self> {
-            Arc::new(Self { provider: Lrclib::default(), cache: cache_dir.map(LyricsCache::new) })
+            Arc::new(Self { provider: Chain::default(), cache: cache_dir.map(LyricsCache::new) })
         }
 
         /// Blocking (network): call it off the UI thread.

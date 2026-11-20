@@ -14,6 +14,8 @@ public enum OverlayBackground
     Gradient,
     /// <summary>The base colour alone.</summary>
     Solid,
+    /// <summary>No card and no album colours: the text floats over the desktop.</summary>
+    None,
 }
 
 /// <summary>Dark card with light text, or a pale card with dark text. Auto picks light only for pale covers.</summary>
@@ -29,6 +31,8 @@ public enum DiscordStatusLine
     Title,
     /// <summary>The lyric being sung (the artist between lines and without lyrics).</summary>
     Lyric,
+    /// <summary>The album name (the artist when there is none).</summary>
+    Album,
 }
 
 /// <summary>Small persisted state in %LOCALAPPDATA%\Overtone\settings.json.</summary>
@@ -66,6 +70,27 @@ public sealed class Settings
 
     /// <summary>Show only music: videos and other media in browsers and players are ignored (tray menu).</summary>
     public bool MusicOnly { get; set; } = true;
+
+    /// <summary>A dropped overlay springs to the nearest screen edge (tray menu, on by default). Off: it stays where it's dropped.</summary>
+    public bool SnapToEdges { get; set; } = true;
+
+    /// <summary>Ghost mode dims the overlay (tray menu, on by default). Off: it keeps full opacity and only lets clicks through.</summary>
+    public bool GhostDims { get; set; } = true;
+
+    /// <summary>
+    /// With no background, the text turns dark over light screens and light over dark
+    /// ones (tray menu, on by default), whatever the tone. Off: the tone decides.
+    /// </summary>
+    public bool MatchBehind { get; set; } = true;
+
+    /// <summary>With no background, text in the album's colours (tray menu, off by default). Off: plain black or white.</summary>
+    public bool TextOnlyColours { get; set; } = false;
+
+    /// <summary>With no background, the subtitle-style shadow behind the text (tray menu, on by default).</summary>
+    public bool TextOnlyShadow { get; set; } = true;
+
+    /// <summary>Lyrics only (tray menu): no artwork, song, progress or controls; one line or several by height.</summary>
+    public bool LyricsOnly { get; set; } = false;
 
     /// <summary>
     /// Overrides the Discord application the presence card belongs to (development

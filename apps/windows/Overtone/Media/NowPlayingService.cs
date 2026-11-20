@@ -13,6 +13,9 @@ public sealed record Artwork(byte[] Rgba, int Width, int Height, byte[] DisplayB
 public sealed record TrackInfo(string Title, string Artist, string Album, long? DurationMs, string SourceApp, Artwork? Art)
 {
     public bool SameSong(TrackInfo? o) => o is not null && o.Title == Title && o.Artist == Artist && o.Album == Album && o.SourceApp == SourceApp;
+
+    /// <summary>The line under the title: the artist, or the album when a file has no artist tag.</summary>
+    public string Byline => string.IsNullOrWhiteSpace(Artist) ? Album : Artist;
 }
 
 /// <summary>What the overlay is presenting right now, for Discord Rich Presence. Position is the corrected clock's.</summary>
@@ -225,7 +228,8 @@ public sealed class NowPlayingService : IDisposable
 
             var tl = s.GetTimelineProperties();
             var duration = (tl.EndTime - tl.StartTime).TotalMilliseconds;
-            var candidate = new TrackInfo(p.Title ?? "", p.Artist ?? "", p.AlbumTitle ?? "", duration > 0 ? (long)duration : null, s.SourceAppUserModelId, null);
+            var (title, artist) = Tidy(p.Title ?? "", p.Artist ?? "", p.AlbumArtist ?? "");
+            var candidate = new TrackInfo(title, artist, p.AlbumTitle?.Trim() ?? "", duration > 0 ? (long)duration : null, s.SourceAppUserModelId, null);
 
             // Players fire title, artwork and timeline as separate events: skip re-reads
             // that change nothing, but take artwork that arrives after the title.
@@ -242,6 +246,32 @@ public sealed class NowPlayingService : IDisposable
         catch (Exception) { /* session vanished between events */ }
     }
 
+    private static readonly string[] AudioExtensions =
+        [".mp3", ".flac", ".m4a", ".aac", ".ogg", ".oga", ".opus", ".wav", ".wma", ".alac", ".aif", ".aiff", ".ape", ".wv", ".mka"];
+
+    /// <summary>
+    /// Local files often arrive half-tagged: no artist (use the album artist), or no
+    /// tags at all, when players report the file name as the title. A title that is a
+    /// file name loses its extension and track number ("03 - Artist - Song.flac"),
+    /// and without an artist tag an "Artist - Song" name is split.
+    /// </summary>
+    internal static (string Title, string Artist) Tidy(string title, string artist, string albumArtist)
+    {
+        title = title.Trim();
+        artist = artist.Trim();
+        if (artist.Length == 0) artist = albumArtist.Trim();
+        var ext = Path.GetExtension(title);
+        if (ext.Length == 0 || !AudioExtensions.Contains(ext, StringComparer.OrdinalIgnoreCase)) return (title, artist);
+
+        var name = title[..^ext.Length].Replace('_', ' ').Trim();
+        // A track number: "03 - ", "3. ", "1-03 - " (disc-track), or "03 " with its leading
+        // zero. A bare number and a space stays: "99 Problems" is a title.
+        name = System.Text.RegularExpressions.Regex.Replace(name, @"^(\d{1,2}(-\d{1,3})?\s*[.\-–)]\s*|0\d(-\d{1,3})?\s+)", "").Trim();
+        if (artist.Length == 0 && name.Split(" - ", 2) is [var a, var t] && a.Trim().Length > 0 && t.Trim().Length > 0)
+            return (t.Trim(), a.Trim());
+        return (name.Length > 0 ? name : title, artist);
+    }
+
     /// <summary>
     /// Is this item music? In order: a dedicated music player always is; an item
     /// with an album and artist is (YouTube Music, Spotify and Deezer on the web);
@@ -256,6 +286,13 @@ public sealed class NowPlayingService : IDisposable
         if (musicApps.Any(id.Contains)) return true;
         if (!string.IsNullOrWhiteSpace(p.AlbumTitle) && !string.IsNullOrWhiteSpace(p.Artist)) return true;
         if (p.PlaybackType == MediaPlaybackType.Video) return false;
+        // Local files, often untagged: Windows' Media Player and VLC play video too, so
+        // they count only for non-video items; a title that is an audio file's name
+        // counts anywhere; and so does an item the player marks as music with an album.
+        string[] localPlayers = ["zunemusic", "wmplayer", "vlc"];
+        if (localPlayers.Any(id.Contains)) return true;
+        if (AudioExtensions.Contains(Path.GetExtension(p.Title ?? ""), StringComparer.OrdinalIgnoreCase)) return true;
+        if (p.PlaybackType == MediaPlaybackType.Music && !string.IsNullOrWhiteSpace(p.AlbumTitle)) return true;
         if (string.IsNullOrWhiteSpace(p.Artist) || string.IsNullOrWhiteSpace(p.Title)) return false;
 
         var key = $"{id}\u0001{p.Artist}\u0001{p.Title}";

@@ -44,6 +44,11 @@ internal static unsafe partial class CoreLib
         [MarshalAs(UnmanagedType.LPUTF8Str)] string artist,
         [MarshalAs(UnmanagedType.LPUTF8Str)] string album,
         long durationMs);
+    [DllImport(Dll)] private static extern nint ot_cover_like(
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string title,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string artist,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string album,
+        long durationMs, byte* rgba, nuint len, uint width, uint height);
     [DllImport(Dll)] private static extern uint ot_mix_oklch(uint a, uint b, float t);
     [DllImport(Dll)] private static extern uint ot_tint_oklch(uint baseColor, uint toward, float t);
     [DllImport(Dll)] private static extern float ot_flat_tint();
@@ -88,6 +93,38 @@ internal static unsafe partial class CoreLib
         {
             var url = Marshal.PtrToStringUTF8(ptr);
             return string.IsNullOrEmpty(url) ? null : url;
+        }
+        finally
+        {
+            ot_string_free(ptr);
+        }
+    }
+
+    /// <summary>What <see cref="CoverLike"/> found.</summary>
+    public enum CoverLook { Match, None, Error }
+
+    /// <summary>
+    /// Blocking: the catalogue cover (iTunes, Deezer) that looks most like the local
+    /// artwork (straight RGBA). <see cref="CoverLook.None"/> when nothing looks close,
+    /// <see cref="CoverLook.Error"/> when no catalogue could be reached.
+    /// </summary>
+    public static (CoverLook Look, string? Url) CoverLike(string title, string artist, string album, long? durationMs, byte[] rgba, int width, int height)
+    {
+        nint ptr;
+        fixed (byte* px = rgba)
+        {
+            ptr = ot_cover_like(title, artist, album, durationMs ?? -1, px, (nuint)rgba.Length, (uint)width, (uint)height);
+        }
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(Marshal.PtrToStringUTF8(ptr) ?? "{}");
+            var root = doc.RootElement;
+            return root.TryGetProperty("status", out var status) ? status.GetString() switch
+            {
+                "match" => (CoverLook.Match, root.GetProperty("url").GetString()),
+                "none" => (CoverLook.None, null),
+                _ => (CoverLook.Error, null),
+            } : (CoverLook.Error, null);
         }
         finally
         {

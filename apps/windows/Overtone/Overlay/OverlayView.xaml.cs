@@ -71,6 +71,16 @@ public sealed partial class OverlayView : UserControl
         height < CardFrom ? OverlayMode.Pill : height < LyricsFrom ? OverlayMode.Card : OverlayMode.Lyrics;
 
     /// <summary>
+    /// Lyrics only turns into several lines as soon as two whole rows fit (12 + 2 × 30 + 12),
+    /// so a short panel of two or three lines stays a panel rather than one big line.
+    /// </summary>
+    private const double LyricsOnlyFrom = 84;
+
+    /// <summary>Lyrics only has no player card: one line (a pill, its text growing with the height) up to the lyric panel.</summary>
+    private OverlayMode Layout(double height) =>
+        _lyricsOnly ? (height < LyricsOnlyFrom ? OverlayMode.Pill : OverlayMode.Lyrics) : LayoutFor(height);
+
+    /// <summary>
     /// Card corner radius for a layout at height <paramref name="h"/>. A pill's corners grow
     /// with its height (14 at 48 px, 26 at the tallest), so a big cover inside it stays concentric.
     /// </summary>
@@ -146,6 +156,7 @@ public sealed partial class OverlayView : UserControl
     // Size: what the user chose (DIPs), and whether the lyric space is in use.
     private double _userW = 400, _userH = 48;
     private bool _lyricsSpace = true;
+    private bool _lyricsOnly;
     private double _lyricWidth = 332;
     private double _cardArt = 64;
     private readonly DispatcherQueueTimer _panelTimer;
@@ -200,7 +211,11 @@ public sealed partial class OverlayView : UserControl
         Motion.WatchOpaque(() => DispatcherQueue.TryEnqueue(ApplyBackground));
 
         Loaded += (_, _) => BuildComposition();
-        Card.SizeChanged += (_, e) => ResizeShapes(e.NewSize);
+        Card.SizeChanged += (_, e) =>
+        {
+            ResizeShapes(e.NewSize);
+            ResizeHalo(e.NewSize);
+        };
         LyricWindow.SizeChanged += (_, e) =>
         {
             LyricWindow.Clip = new RectangleGeometry { Rect = new Rect(-LyricOverhang, 0, e.NewSize.Width + LyricOverhang * 2, e.NewSize.Height) };
@@ -237,8 +252,101 @@ public sealed partial class OverlayView : UserControl
         ApplyUserSize(400, 48, animate: false);
     }
 
-    /// <summary>Raised with false when nothing is playing anywhere, true when something is.</summary>
+    /// <summary>
+    /// Raised with false when there is nothing to show (nothing playing anywhere; in
+    /// lyrics only, a song without lyrics), true when there is.
+    /// </summary>
     public event Action<bool>? TrackPresence;
+
+    private void RaiseTrackPresence() => TrackPresence?.Invoke(_track is not null && (!_lyricsOnly || _lyricsSpace));
+
+    /// <summary>
+    /// Lyrics only (tray menu): no artwork, song, progress or controls. Below the lyric
+    /// panel's height the card is a single line whose text grows with the height; above,
+    /// the lyric panel without its footer. A song without lyrics hides the overlay.
+    /// </summary>
+    public bool LyricsOnly
+    {
+        get => _lyricsOnly;
+        set
+        {
+            if (_lyricsOnly == value) return;
+            _lyricsOnly = value;
+            ApplyAlign();
+            ApplyFold();
+            ApplyUserSize(_userW, _userH, animate: Live);
+            if (_track is not null) SetPillLine(PillLineText(_lyricNow), false, MsToNextLine());
+            RaiseTrackPresence();
+        }
+    }
+
+    /// <summary>
+    /// Where lyrics-only text sits: the overlay's own window picks it from which third of
+    /// the screen it is in, so the words hug the side they're nearest (centred mid-screen).
+    /// Every other layout stays left-aligned beside its artwork and controls.
+    /// </summary>
+    public TextAlignment LyricAlign
+    {
+        get => _align;
+        set
+        {
+            if (_align == value) return;
+            _align = value;
+            if (_lyricsOnly) ApplyAlign();
+        }
+    }
+
+    private TextAlignment _align = TextAlignment.Left;
+
+    /// <summary>The alignment in effect: lyrics only follows the screen; the rest is left.</summary>
+    private TextAlignment Align => _lyricsOnly ? _align : TextAlignment.Left;
+
+    /// <summary>Where a row scales from: its aligned edge (or middle), so shrinking lines keep their edge.</summary>
+    private float AlignX(double width) => Align switch
+    {
+        TextAlignment.Center => (float)width / 2,
+        TextAlignment.Right => (float)width,
+        _ => 0,
+    };
+
+    private void ApplyAlign()
+    {
+        var a = Align;
+        var h = a switch { TextAlignment.Center => HorizontalAlignment.Center, TextAlignment.Right => HorizontalAlignment.Right, _ => HorizontalAlignment.Left };
+        LyricStatus.TextAlignment = a;
+        LyricStatus.HorizontalAlignment = HorizontalAlignment.Stretch;
+        foreach (var r in _rows)
+        {
+            if (r.Faint is not null) r.Faint.TextAlignment = r.Now!.TextAlignment = a;
+            if (r.DotsPanel is not null) r.DotsPanel.HorizontalAlignment = h;
+            Motion.V(r.Root).CenterPoint = new Vector3(AlignX(r.Root.Width), (float)r.Height / 2, 0);
+        }
+        if (_compositor is not null) Remarquee(_pillFront ? PillLineA : PillLineB, PillLineHost);
+    }
+
+    /// <summary>The lyric space is folded away: a song without lyrics (never in lyrics only, which hides instead).</summary>
+    private bool Folded => !_lyricsSpace && !_lyricsOnly;
+
+    /// <summary>
+    /// The transport buttons on show, in DIPs relative to the window's client area.
+    /// Ghost mode lets clicks through everywhere else.
+    /// </summary>
+    public IEnumerable<Rect> ControlBounds()
+    {
+        if (Panel(_mode).Visibility != Visibility.Visible) yield break;
+        var bars = _mode switch
+        {
+            OverlayMode.Pill => new[] { PillTransport, PillTransportTall },
+            OverlayMode.Card => [CardTransport],
+            _ => [LyricsTransport],
+        };
+        foreach (var bar in bars)
+        {
+            if (bar.Visibility != Visibility.Visible || bar.ActualWidth <= 0) continue;
+            foreach (var b in bar.Buttons)
+                yield return b.TransformToVisual(null).TransformBounds(new Rect(0, 0, b.ActualWidth, b.ActualHeight));
+        }
+    }
 
     public event Action? CycleModeRequested;
 
@@ -303,8 +411,8 @@ public sealed partial class OverlayView : UserControl
     /// </summary>
     public Size DesiredCardSize => new(_userW, _mode switch
     {
-        OverlayMode.Card when !_lyricsSpace => _userH - CardLyricRow,
-        OverlayMode.Lyrics when !_lyricsSpace => FoldedLyricsHeight,
+        OverlayMode.Card when Folded => _userH - CardLyricRow,
+        OverlayMode.Lyrics when Folded => FoldedLyricsHeight,
         _ => _userH,
     });
 
@@ -321,7 +429,7 @@ public sealed partial class OverlayView : UserControl
     /// </summary>
     public void ApplyDrawnSize(double w, double drawnH, bool animate)
     {
-        if (_lyricsSpace)
+        if (!Folded)
         {
             ApplyUserSize(w, drawnH, animate);
             return;
@@ -371,6 +479,7 @@ public sealed partial class OverlayView : UserControl
         _cardFade = new EdgeFade(CardLyricFrame, CardLyricHost);
         _cardFade.Resize(new Size(CardLyricHost.ActualWidth, CardLyricHost.ActualHeight));
         ResizeShapes(new Size(Card.ActualWidth, Card.ActualHeight));
+        ApplyHalo();
         if (_entrance) Appear();
         SyncAll();
     }
@@ -422,8 +531,43 @@ public sealed partial class OverlayView : UserControl
         var size = new Vector2((float)(window.Width + LyricOverhang * 2), (float)window.Height);
         _lyricSurface.SourceSize = size;
         _lyricSprite.Size = size;
-        _fadeTopIn!.Offset = (float)(LyricFadeTop / window.Height);
-        _fadeBottomIn!.Offset = (float)(1 - LyricFadeBottom / window.Height);
+        _fadeTopIn!.Offset = (float)(_fadeTopLen / window.Height);
+        _fadeBottomIn!.Offset = (float)(1 - _fadeBottomLen / window.Height);
+    }
+
+    // How far each edge's fade reaches into the lyric window, in DIPs.
+    private double _fadeTopLen = LyricFadeTop, _fadeBottomLen = LyricFadeBottom;
+
+    /// <summary>The longest fade lyrics only gives a row cut by an edge.</summary>
+    private const double LyricsOnlyFadeMax = 48;
+
+    /// <summary>
+    /// Sets how far the edge fades reach. Lyrics only has no card edge to explain a cut,
+    /// so there a cut row fades across all of its visible part (12 to 48 px) and dissolves
+    /// rather than reading as sliced; the rows that fit keep full strength.
+    /// </summary>
+    private void SetFadeLengths(double top, double bottom, bool animate)
+    {
+        if (Math.Abs(top - _fadeTopLen) < 0.5 && Math.Abs(bottom - _fadeBottomLen) < 0.5) return;
+        _fadeTopLen = top;
+        _fadeBottomLen = bottom;
+        var h = LyricWindow.ActualHeight;
+        if (_fadeTopIn is null || _fadeBottomIn is null || h <= 0) return;
+        void To(CompositionColorGradientStop stop, double offset)
+        {
+            stop.StopAnimation("Offset");
+            if (!animate || Motion.Reduced)
+            {
+                stop.Offset = (float)offset;
+                return;
+            }
+            var a = _compositor!.CreateScalarKeyFrameAnimation();
+            a.InsertKeyFrame(1, (float)offset);
+            a.Duration = Motion.Lyric;
+            stop.StartAnimation("Offset", a);
+        }
+        To(_fadeTopIn, Math.Min(0.5, top / h));
+        To(_fadeBottomIn, Math.Max(0.5, 1 - bottom / h));
     }
 
     /// <summary>Fades an edge only while a row is actually cut by it.</summary>
@@ -485,7 +629,8 @@ public sealed partial class OverlayView : UserControl
         // a larger lyric get the full width beside artwork that fills the height.
         // Two lines need real room: below TwoLinePillFrom the compact one-line pill stays,
         // rather than squeezing a song line and a lyric against the edges.
-        var twoLine = _userH >= TwoLinePillFrom;
+        // Lyrics only has neither: one line at any height.
+        var twoLine = !_lyricsOnly && _userH >= TwoLinePillFrom;
         // Text scales with the height so the lines fill the cover's height rather than
         // leaving wide gaps: the lyric is sized so the column's content takes ~85-90% of
         // the room (the rest is spacing); the song line follows at about 0.7x.
@@ -500,7 +645,7 @@ public sealed partial class OverlayView : UserControl
         // A narrow pill moves its controls under the text a little sooner (snugger insets),
         // since beside the text they would leave it only a word or two.
         var narrow = besideWidth < MinPillText;
-        var tall = TallPillContent(14.5) + 2 * (narrow ? PillInset : TallPillInset) <= _userH;
+        var tall = !_lyricsOnly && TallPillContent(14.5) + 2 * (narrow ? PillInset : TallPillInset) <= _userH;
         // Still too narrow: previous and next go (play/pause stays), beside the text or
         // beside a tall pill's progress bar, whichever row is short of room.
         var tallText = _userW - 2 * PillInset - Math.Clamp(_userH - 2 * PillInset, 32, 112) - 12 - 4;
@@ -529,6 +674,9 @@ public sealed partial class OverlayView : UserControl
         var twoLineStart = Math.Min(Math.Clamp(((TwoLinePillFrom - 2 * PillInset - 4) * 0.85 - 9) / 2.36, 13.5, 18), widthCap);
         var oneLineFont = 13.5 + (Math.Clamp(_userH, CardMinHeight, TwoLinePillFrom) - CardMinHeight) / (TwoLinePillFrom - CardMinHeight) * (twoLineStart - 13.5);
         var lineSize = tall ? tallFont : twoLine ? Math.Min(twoLineFont, widthCap) : oneLineFont;
+        // Lyrics only: the line alone, growing with the height (about half of it, as a
+        // caption would), capped so a long line still shows a few words before it glides.
+        if (_lyricsOnly) lineSize = Math.Clamp(Math.Min((_userH - 2 * PillInset) * 0.5, (_userW - 32) / 12), 13.5, 34);
         lineSize = Math.Round(lineSize * 2) / 2;
         double titleSize;
         titleSize = twoLine ? Math.Round(Math.Clamp(lineSize * (tall ? 0.68 : 0.72), 11.5, 15) * 2) / 2 : 11.5;
@@ -537,9 +685,14 @@ public sealed partial class OverlayView : UserControl
         // progress at its bottom); one line: a centred group.
         PillText.VerticalAlignment = twoLine ? VerticalAlignment.Stretch : VerticalAlignment.Center;
         PillText.Margin = new Thickness(0, twoLine ? 2 : 0, 0, twoLine ? (tall ? 0 : 3) : 0);
-        PillTransport.Visibility = tall ? Visibility.Collapsed : Visibility.Visible;
+        PillTransport.Visibility = tall || _lyricsOnly ? Visibility.Collapsed : Visibility.Visible;
         PillTransportTall.Visibility = tall ? Visibility.Visible : Visibility.Collapsed;
-        PillPanel.Padding = new Thickness(6, 6, tall ? 10 : 4, 6);
+        PillPanel.Padding = _lyricsOnly ? new Thickness(18, 6, 18, 6) : new Thickness(6, 6, tall ? 10 : 4, 6);
+        // Lyrics only: no cover, progress or controls; the line has the whole card.
+        var chrome = _lyricsOnly ? Visibility.Collapsed : Visibility.Visible;
+        PillArt.Visibility = PillBottom.Visibility = chrome;
+        PillPanel.ColumnSpacing = _lyricsOnly ? 0 : 12;
+        if (_lyricsOnly) PillArtColumn.Width = new GridLength(0);
         // Optical centring: a lyric is mostly lowercase, so its visual weight (x-height,
         // descenders) sits below its box's centre and it reads low between the song line
         // and the progress bar. Lift it by a tenth of its size where it sits between them.
@@ -561,13 +714,13 @@ public sealed partial class OverlayView : UserControl
         SetCorner(CardArt, _native ? 6 : Math.Round(Math.Clamp(_cardArt * 0.12, 6, 12)));
         if (CardTitle.Text.Length > 0) CardTitle.FontSize = FitFont(CardTitle.Text, 16, 13.5, CardTitleWidth);
 
-        var m = LayoutFor(_userH);
+        var m = Layout(_userH);
         var from = Panel(_mode);
         if (m != _mode || from.Visibility != Visibility.Visible) SetLayout(m);
         else
         {
             // Same layout, new height: a pill's corner radius follows it.
-            Rim.CornerRadius = new CornerRadius(Radius(m, _userH));
+            Rim.CornerRadius = Bounds.CornerRadius = new CornerRadius(Radius(m, _userH));
             ResizeShapes(new Size(Card.ActualWidth, Card.ActualHeight));
         }
         ShowPanel(Panel(m), from, animate);
@@ -608,6 +761,27 @@ public sealed partial class OverlayView : UserControl
             if (p != Panel(_mode)) p.Visibility = Visibility.Collapsed;
     }
 
+    private bool _boundsShown;
+
+    /// <summary>
+    /// With no background there is no card to see, so while the overlay is dragged or
+    /// resized a see-through box shows its extent; it fades out on release.
+    /// </summary>
+    public void ShowBounds(bool on)
+    {
+        on &= _background == OverlayBackground.None;
+        if (on == _boundsShown) return;
+        _boundsShown = on;
+        if (_compositor is null) return;
+        if (on)
+        {
+            Bounds.CornerRadius = Rim.CornerRadius;
+            Bounds.Visibility = Visibility.Visible;
+            Motion.Fade(Bounds, 1, Motion.Reduced ? 0 : 120, 0);
+        }
+        else Motion.Fade(Bounds, 0, Motion.Reduced ? 0 : 220);
+    }
+
     /// <summary>Card size in DIPs; the window sets it every frame while animating or resizing.</summary>
     public void SetCardSize(double w, double h)
     {
@@ -621,7 +795,7 @@ public sealed partial class OverlayView : UserControl
     private void SetLayout(OverlayMode m)
     {
         _mode = m;
-        Rim.CornerRadius = new CornerRadius(Radius(m, _userH));
+        Rim.CornerRadius = Bounds.CornerRadius = new CornerRadius(Radius(m, _userH));
         ResizeShapes(new Size(Card.ActualWidth, Card.ActualHeight));
         UpdateTimes();
         UpdateTicker();
@@ -638,14 +812,16 @@ public sealed partial class OverlayView : UserControl
     /// </summary>
     private void ApplyFold()
     {
-        var fold = !_lyricsSpace;
+        var fold = Folded;
         // The footer's cover sits as far from the bottom and left edges as from the top when folded.
-        LyricsPanel.Padding = new Thickness(16, fold ? 16 : 12, 12, 16);
+        LyricsPanel.Padding = new Thickness(16, fold ? 16 : 12, 12, _lyricsOnly ? 12 : 16);
         LyricWindow.Visibility = fold ? Visibility.Collapsed : Visibility.Visible;
+        // Lyrics only: the rows without the song, cover and controls under them.
+        LyricsFooter.Visibility = _lyricsOnly ? Visibility.Collapsed : Visibility.Visible;
         LyricsFooter.Margin = new Thickness(0, fold ? 0 : 10, 0, 0);
         LyricsFooter.Padding = new Thickness(0, fold ? 0 : 10, 0, 0);
         LyricsFooter.BorderThickness = new Thickness(0, fold ? 0 : 1, 0, 0);
-        CardLyricFrame.Visibility = _lyricsSpace ? Visibility.Visible : Visibility.Collapsed;
+        CardLyricFrame.Visibility = fold ? Visibility.Collapsed : Visibility.Visible;
         DesiredSizeChanged?.Invoke();
     }
 
@@ -669,11 +845,34 @@ public sealed partial class OverlayView : UserControl
     /// Ghost mode's dimming, on the XAML root so it multiplies with the composition
     /// fades of Appear and Disappear rather than fighting them.
     /// </summary>
-    public void SetGhost(bool ghost)
+    public void SetGhost(bool ghost, bool overControls = false)
     {
+        _ghostShown = ghost;
+        _ghostOverControls = overControls;
         Root.OpacityTransition ??= new ScalarTransition { Duration = TimeSpan.FromMilliseconds(Motion.Reduced ? 150 : 200) };
-        Root.Opacity = ghost ? GhostOpacity : 1;
+        // Over the controls (the only part that takes clicks) the card firms up, so it's
+        // clear they're live.
+        Root.Opacity = !ghost || !GhostDims ? 1 : overControls ? GhostControlsOpacity : GhostOpacity;
     }
+
+    private bool _ghostShown, _ghostOverControls;
+
+    /// <summary>Whether ghost mode dims the overlay (a setting: some prefer it at full strength).</summary>
+    public bool GhostDims
+    {
+        get => _ghostDims;
+        set
+        {
+            if (_ghostDims == value) return;
+            _ghostDims = value;
+            SetGhost(_ghostShown, _ghostOverControls);
+        }
+    }
+
+    private bool _ghostDims = true;
+
+    /// <summary>Ghost mode while the pointer is over the transport controls.</summary>
+    public const double GhostControlsOpacity = 0.9;
 
     /// <summary>Fades the card out, then runs <paramref name="then"/>.</summary>
     public void Disappear(Action then)
@@ -706,7 +905,7 @@ public sealed partial class OverlayView : UserControl
         {
             _track = null;
             _lineTimer.Stop();
-            TrackPresence?.Invoke(false);
+            RaiseTrackPresence();
             RaisePresence();
             return;
         }
@@ -715,10 +914,11 @@ public sealed partial class OverlayView : UserControl
         _track = t;
 
         CardTitle.Text = LyricsTitle.Text = string.IsNullOrWhiteSpace(t.Title) ? "Untitled" : t.Title;
-        CardArtist.Text = LyricsArtist.Text = t.Artist;
+        // Local files without an artist tag show their album there instead.
+        CardArtist.Text = LyricsArtist.Text = t.Byline;
         UpdatePillTitle(_lyricNow);
         CardTitle.FontSize = FitFont(CardTitle.Text, 16, 13.5, CardTitleWidth);
-        AutomationProperties.SetName(Card, $"Now playing: {CardTitle.Text}, {t.Artist}");
+        AutomationProperties.SetName(Card, $"Now playing: {CardTitle.Text}, {t.Byline}");
 
         ApplyArtwork(t.Art, newSong);
 
@@ -731,7 +931,7 @@ public sealed partial class OverlayView : UserControl
             _ = LoadLyricsAsync(t);
         }
 
-        TrackPresence?.Invoke(true);
+        RaiseTrackPresence();
         SyncAll();
     }
 
@@ -927,6 +1127,7 @@ public sealed partial class OverlayView : UserControl
         if (rgba is null)
         {
             Motion.Fade(front, 0, ms);
+            BackdropChanged?.Invoke(null, 0);
             return;
         }
         var n = CoreLib.BackdropSize;
@@ -942,7 +1143,15 @@ public sealed partial class OverlayView : UserControl
         Motion.Fade(back, 1, ms, 0);
         Motion.Fade(front, 0, ms);
         _backAFront = !_backAFront;
+        BackdropChanged?.Invoke(bgra, n);
     }
+
+    /// <summary>
+    /// The blurred cover behind the card as BGRA pixels and side length (the tray panel's
+    /// header shows it too, from its own bitmap: an image source can't be shared between
+    /// windows); null without artwork.
+    /// </summary>
+    public event Action<byte[]?, int>? BackdropChanged;
 
     /// <summary>What fills the card. The OS "Transparency effects" switch turns the blurred cover into a solid fill.</summary>
     public new OverlayBackground Background
@@ -950,8 +1159,10 @@ public sealed partial class OverlayView : UserControl
         get => _background;
         set
         {
+            var themed = _background != OverlayBackground.None;
             _background = value;
             ApplyBackground();
+            if (themed != (value != OverlayBackground.None)) Recolor(animate: Live);
         }
     }
 
@@ -976,14 +1187,104 @@ public sealed partial class OverlayView : UserControl
         }
     }
 
+    private bool? _behindLight;
+
+    /// <summary>
+    /// What's on screen around the overlay, with no background and matching it on: true
+    /// light (dark text), false dark (light text); null leaves it to the tone.
+    /// </summary>
+    public bool? BehindLight
+    {
+        get => _behindLight;
+        set
+        {
+            if (_behindLight == value) return;
+            _behindLight = value;
+            if (_background == OverlayBackground.None) Recolor(animate: Live);
+        }
+    }
+
     private void Recolor(bool animate)
     {
         var force = _tone switch { OverlayTone.Dark => 0, OverlayTone.Light => 1, OverlayTone.System => SystemDark() ? 0 : 1, _ => -1 };
-        var p = _artwork is { } a ? CoreLib.Palette(a.Rgba, a.Width, a.Height, force) : CoreLib.Palette([], 0, 0, force);
-        _theme.Apply(p, animate);
+        var cover = _artwork is { } a ? CoreLib.Palette(a.Rgba, a.Width, a.Height, force) : CoreLib.Palette([], 0, 0, force);
+        var none = _background == OverlayBackground.None;
+        // The tray menu (ThemeApplied) keeps the brand's neutral palette in the chosen
+        // tone, so it neither turns grey nor flips as the overlay moves.
+        var p = none ? Floating(CoreLib.Palette([], 0, 0, force)) : cover;
+        var shown = cover;
+        if (none)
+        {
+            // No background: the tone is what's behind when matching it, else the chosen one.
+            var tone = _behindLight is { } light ? (light ? 1 : 0) : force;
+            // Album colours (opt-in): the cover's palette solved for that tone. Otherwise
+            // plain black or white text, with no brand tint.
+            shown = _textOnlyColours && _artwork is { } art
+                ? Floating(CoreLib.Palette(art.Rgba, art.Width, art.Height, tone))
+                : Mono(tone >= 0 ? tone == 1 : p.IsLight);
+        }
+        _theme.Floating = none;
+        _theme.Apply(shown, animate);
+        _haloLight = shown.IsLight;
+        ApplyHalo();
         ThemeApplied?.Invoke(p);
         // The tray icon follows the cover; with no artwork it returns to the brand colours.
-        PaletteChanged?.Invoke(_artwork is null ? null : p);
+        PaletteChanged?.Invoke(_artwork is null ? null : cover);
+    }
+
+    /// <summary>
+    /// Inks for text with no card under it. The soft and faint inks are tuned for
+    /// contrast against the card's ground, which isn't drawn here, so on the desktop
+    /// they turn into a grey that vanishes. They become the ink, muted only slightly
+    /// toward the ground; the halo carries the contrast instead.
+    /// </summary>
+    private static OtPalette Floating(OtPalette p)
+    {
+        p.InkSoft = CoreLib.MixOklch(p.Ink, p.Base, 0.15f);
+        p.InkFaint = CoreLib.MixOklch(p.Ink, p.Base, 0.3f);
+        return p;
+    }
+
+    /// <summary>Pure greys for text with no background: near-black on light screens, white on dark.</summary>
+    private static OtPalette Mono(bool light)
+    {
+        uint ink = light ? 0x111111u : 0xFFFFFFu, ground = light ? 0xF2F2F2u : 0x121212u;
+        return Floating(new OtPalette
+        {
+            Tone = light ? 1u : 0u,
+            Base = ground,
+            Accent = ink,
+            Ink = ink,
+            Mesh0 = ground,
+            Mesh1 = ground,
+            Mesh2 = ground,
+        });
+    }
+
+    private bool _textOnlyColours, _textOnlyShadow = true;
+
+    /// <summary>With no background, the album's colours instead of plain black or white text (tray menu).</summary>
+    public bool TextOnlyColours
+    {
+        get => _textOnlyColours;
+        set
+        {
+            if (_textOnlyColours == value) return;
+            _textOnlyColours = value;
+            if (_background == OverlayBackground.None) Recolor(animate: Live);
+        }
+    }
+
+    /// <summary>With no background, the subtitle-style shadow behind the text (tray menu).</summary>
+    public bool TextOnlyShadow
+    {
+        get => _textOnlyShadow;
+        set
+        {
+            if (_textOnlyShadow == value) return;
+            _textOnlyShadow = value;
+            ApplyHalo();
+        }
     }
 
     private Windows.UI.ViewManagement.UISettings? _systemTheme;
@@ -1011,7 +1312,6 @@ public sealed partial class OverlayView : UserControl
         GlowButton.Native = native;
         foreach (var t in new[] { PillTransport, PillTransportTall, CardTransport, LyricsTransport }) t.SetNative(native);
         SetCorner(LyricsArt, native ? 4 : 7);
-        ShadowHost.Visibility = native ? Visibility.Collapsed : Visibility.Visible;
         ApplyBackground();
         ApplyUserSize(_userW, _userH, animate: false); // re-derives corner radii and artwork
         Rim.CornerRadius = new CornerRadius(Radius(_mode, _userH));
@@ -1021,11 +1321,87 @@ public sealed partial class OverlayView : UserControl
     /// <summary>The current track's palette, or null without artwork (the tray icon follows it).</summary>
     public event Action<OtPalette?>? PaletteChanged;
 
+    // ── Halo (no background) ────────────────────────────────────────────────
+
+    private bool _haloLight;
+    private CompositionVisualSurface? _haloSurface;
+    private ContainerVisual? _halo;
+
+    /// <summary>
+    /// With no background the text sits straight on the desktop, so everything in the
+    /// layouts casts a halo, as subtitles do: a tight outline-like shadow for edges plus
+    /// a wide soft one for busy backgrounds. Dark behind light text, white behind dark.
+    /// One live visual surface of the layouts is the mask for both, so lyric rows, the
+    /// glyphs and the progress bar are covered without a shadow per element; it renders
+    /// only when the content changes.
+    /// </summary>
+    private void ApplyHalo()
+    {
+        var on = _background == OverlayBackground.None && _textOnlyShadow && !_native && _compositor is not null;
+        Halo.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        if (!on)
+        {
+            if (_halo is null) return;
+            ElementCompositionPreview.SetElementChildVisual(Halo, null);
+            _halo.Dispose();
+            _haloSurface?.Dispose();
+            (_halo, _haloSurface) = (null, null);
+            return;
+        }
+        var c = _compositor!;
+        if (_halo is null)
+        {
+            _haloSurface = c.CreateVisualSurface();
+            _haloSurface.SourceVisual = Motion.V(Layouts);
+            var mask = c.CreateSurfaceBrush(_haloSurface);
+            mask.Stretch = CompositionStretch.None;
+            mask.HorizontalAlignmentRatio = 0;
+            mask.VerticalAlignmentRatio = 0;
+            _halo = c.CreateContainerVisual();
+            foreach (var blur in HaloBlurs)
+            {
+                var sprite = c.CreateSpriteVisual();
+                var shadow = c.CreateDropShadow();
+                shadow.Mask = mask;
+                shadow.BlurRadius = blur;
+                sprite.Shadow = shadow;
+                _halo.Children.InsertAtTop(sprite);
+            }
+            ElementCompositionPreview.SetElementChildVisual(Halo, _halo);
+            ResizeHalo(new Size(Card.ActualWidth, Card.ActualHeight));
+        }
+        var i = 0;
+        foreach (var v in _halo.Children)
+        {
+            var shadow = (DropShadow)((SpriteVisual)v).Shadow;
+            shadow.Color = _haloLight ? Colors.White : Colors.Black;
+            shadow.Opacity = HaloOpacity[i++];
+        }
+    }
+
+    // Blurring thin strokes spreads them thin, so the body of the halo is the same
+    // mid-size shadow twice (a thick soft outline), with a wide wash under it and a
+    // crisp edge on top. Children enumerate bottom to top, in this order.
+    private static readonly float[] HaloBlurs = [12f, 4f, 4f, 1.5f];
+    private static readonly float[] HaloOpacity = [0.75f, 1f, 1f, 1f];
+
+    private void ResizeHalo(Size s)
+    {
+        if (_halo is null || _haloSurface is null || s.Width <= 0) return;
+        var size = new Vector2((float)s.Width, (float)s.Height);
+        _haloSurface.SourceSize = size;
+        foreach (var v in _halo.Children) v.Size = size;
+    }
+
     private void ApplyBackground()
     {
-        if (_native)
+        var clear = _background == OverlayBackground.None;
+        ShadowHost.Visibility = _native || clear ? Visibility.Collapsed : Visibility.Visible;
+        ApplyHalo();
+        if (_native || clear)
         {
-            // The window's Acrylic (tinted with the base colour) is the background.
+            // Native: the window's Acrylic (tinted with the base colour) is the background.
+            // None: nothing at all; the text floats.
             BaseFill.Visibility = BackA.Visibility = BackB.Visibility = Scrim.Visibility = Tint.Visibility = Rim.Visibility = Visibility.Collapsed;
             return;
         }
@@ -1052,6 +1428,7 @@ public sealed partial class OverlayView : UserControl
         public required Grid Root;
         public TextBlock? Faint, Now;
         public Ellipse[]? Dots;
+        public StackPanel? DotsPanel;
         public Storyboard? Breath;
         public bool Visible, Current;
         public double Top, Height;
@@ -1065,6 +1442,7 @@ public sealed partial class OverlayView : UserControl
         {
             _lyricsSpace = doc.HasLines;
             ApplyFold();
+            if (_lyricsOnly) RaiseTrackPresence();
         }
         _line = int.MinValue;
         _offset = -1;
@@ -1109,7 +1487,12 @@ public sealed partial class OverlayView : UserControl
         var row = new LyricRow { Root = root, Height = MinRowHeight };
         if (line.IsGap)
         {
-            var dots = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5, VerticalAlignment = VerticalAlignment.Center };
+            var dots = new StackPanel
+            {
+                Orientation = Orientation.Horizontal, Spacing = 5, VerticalAlignment = VerticalAlignment.Center,
+                HorizontalAlignment = Align switch { TextAlignment.Center => HorizontalAlignment.Center, TextAlignment.Right => HorizontalAlignment.Right, _ => HorizontalAlignment.Left },
+            };
+            row.DotsPanel = dots;
             row.Dots = new Ellipse[3];
             var sb = new Storyboard();
             for (var i = 0; i < 3; i++)
@@ -1164,6 +1547,7 @@ public sealed partial class OverlayView : UserControl
 
             row.Faint = LyricText(line.Text, "InkFaintBrush");
             row.Now = LyricText(line.Text, "TitleBrush");
+            row.Faint.TextAlignment = row.Now.TextAlignment = Align;
             root.Children.Add(row.Faint);
             root.Children.Add(row.Now);
             // Measured at full size: the current line is the one that must fit.
@@ -1172,7 +1556,7 @@ public sealed partial class OverlayView : UserControl
         }
         root.Height = row.Height;
         var v = Motion.V(root);
-        v.CenterPoint = new Vector3(0, (float)row.Height / 2, 0);
+        v.CenterPoint = new Vector3(AlignX(_lyricWidth), (float)row.Height / 2, 0);
         v.Scale = new Vector3(0.8f, 0.8f, 1);
         if (row.Now is not null) Motion.V(row.Now).Opacity = 0;
         return row;
@@ -1215,7 +1599,7 @@ public sealed partial class OverlayView : UserControl
     }
 
     /// <summary>The lyric window's height; before layout (or while folded) the height it will have.</summary>
-    private double LyricH => LyricWindow.ActualHeight > 1 ? LyricWindow.ActualHeight : Math.Max(40, _userH - 79);
+    private double LyricH => LyricWindow.ActualHeight > 1 ? LyricWindow.ActualHeight : Math.Max(40, _userH - (_lyricsOnly ? 24 : 79));
 
     /// <summary>Re-wraps every row at the current width (after a resize) and re-places the window.</summary>
     private void RelayoutRows()
@@ -1230,7 +1614,7 @@ public sealed partial class OverlayView : UserControl
                 r.Height = Math.Max(MinRowHeight, Math.Ceiling(r.Faint.DesiredSize.Height) + 8);
             }
             r.Root.Height = r.Height;
-            Motion.V(r.Root).CenterPoint = new Vector3(0, (float)r.Height / 2, 0);
+            Motion.V(r.Root).CenterPoint = new Vector3(AlignX(_lyricWidth), (float)r.Height / 2, 0);
             r.Top = top;
             Canvas.SetTop(r.Root, top);
             top += r.Height;
@@ -1274,8 +1658,16 @@ public sealed partial class OverlayView : UserControl
 
         // Edges fade only where a row is cut. Rows are measured with 4 px of air
         // above and below the text, so a row sitting on an edge isn't "cut".
-        bool Cut(double edge) => _rows.Any(r => r.Top + 4 < edge - 0.5 && r.Top + r.Height - 4 > edge + 0.5);
-        SetLyricFade(Cut(offset), Cut(offset + LyricH), animate);
+        LyricRow? CutAt(double edge) => _rows.FirstOrDefault(r => r.Top + 4 < edge - 0.5 && r.Top + r.Height - 4 > edge + 0.5);
+        var topCut = CutAt(offset);
+        var bottomCut = CutAt(offset + LyricH);
+        if (_lyricsOnly)
+            SetFadeLengths(
+                topCut is { } t ? Math.Clamp(t.Top + t.Height - offset, LyricFadeTop, LyricsOnlyFadeMax) : LyricFadeTop,
+                bottomCut is { } b ? Math.Clamp(offset + LyricH - b.Top, LyricFadeBottom, LyricsOnlyFadeMax) : LyricFadeBottom,
+                animate);
+        else SetFadeLengths(LyricFadeTop, LyricFadeBottom, animate);
+        SetLyricFade(topCut is not null, bottomCut is not null, animate);
 
         foreach (var r in _rows)
         {
@@ -1372,14 +1764,16 @@ public sealed partial class OverlayView : UserControl
     private string PillLineText(string? lyric)
     {
         if (lyric is not null) return lyric;
-        var artist = _track?.Artist;
+        // Lyrics only names no song: a note holds the place between lines.
+        if (_lyricsOnly) return "♪";
+        var artist = _track?.Byline;
         return PillTitle.Visibility == Visibility.Visible || string.IsNullOrWhiteSpace(artist) ? CardTitle.Text : $"{CardTitle.Text} · {artist}";
     }
 
     /// <summary>The small line above: "title · artist" over a lyric, the artist alone over the title.</summary>
     private void UpdatePillTitle(string? lyric)
     {
-        var artist = _track?.Artist ?? "";
+        var artist = _track?.Byline ?? "";
         PillTitle.Text = lyric is null ? artist : string.IsNullOrWhiteSpace(artist) ? CardTitle.Text : $"{CardTitle.Text} · {artist}";
     }
 
@@ -1453,6 +1847,9 @@ public sealed partial class OverlayView : UserControl
         line.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         var fade = host == PillLineHost ? _pillFade : host == CardLyricHost ? _cardFade : null;
         var overflow = line.DesiredSize.Width - host.ActualWidth;
+        // A line that fits sits at the aligned edge (or the middle); one that scrolls starts at the left.
+        var k = host == PillLineHost ? Align switch { TextAlignment.Center => 0.5, TextAlignment.Right => 1.0, _ => 0.0 } : 0;
+        Canvas.SetLeft(line, overflow < 0 && host.ActualWidth > 0 ? Math.Round(-overflow * k) : 0);
         if (overflow <= 1 || host.ActualWidth <= 0)
         {
             fade?.Begin(false, animate, line);

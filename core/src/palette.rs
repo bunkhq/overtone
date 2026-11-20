@@ -55,7 +55,12 @@ pub struct Palette {
 impl Palette {
     /// Fallback when there is no artwork (or it is fully transparent).
     pub fn neutral() -> Self {
-        Self::from_clusters(&[Cluster { lab: Lch::new(0.3, 0.02, 5.2).to_lab(), share: 1.0 }], &[], 0.3, 0.02, None)
+        Self::neutral_with_tone(None)
+    }
+
+    /// [`Palette::neutral`] in a forced tone (a light card with no artwork, or no background).
+    pub fn neutral_with_tone(force: Option<Tone>) -> Self {
+        Self::from_clusters(&[Cluster { lab: Lch::new(0.3, 0.02, 5.2).to_lab(), share: 1.0 }], &[], 0.3, 0.02, force)
     }
 
     /// Builds a palette from straight (non-premultiplied) RGBA8 pixels.
@@ -70,7 +75,7 @@ impl Palette {
     pub fn from_rgba_with_tone(rgba: &[u8], width: usize, height: usize, force: Option<Tone>) -> Self {
         let px = sample(rgba, width, height);
         if px.is_empty() {
-            return Self::neutral();
+            return Self::neutral_with_tone(force);
         }
         let mean_l = px.iter().map(|p| p.l).sum::<f32>() / px.len() as f32;
         let mean_c = px.iter().map(Lab::chroma).sum::<f32>() / px.len() as f32;

@@ -10,6 +10,10 @@ public sealed partial class TransportBar : UserControl
 
     public event Action? Previous, PlayPause, Next;
 
+    /// <summary>The buttons on show (compact hides previous and next).</summary>
+    public IEnumerable<FrameworkElement> Buttons =>
+        new FrameworkElement[] { PrevButton, PlayButton, NextButton }.Where(b => b.Visibility == Visibility.Visible);
+
     private bool _native, _playing = true;
     private double _button = 32, _glyph = 16, _radius = 10;
 

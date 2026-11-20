@@ -33,6 +33,7 @@ public partial class App : Application
         }
 
         var settings = Settings.Load();
+        Win32.OptOutOfThrottling();
         _media = new NowPlayingService(DispatcherQueue.GetForCurrentThread()) { MusicOnly = settings.MusicOnly };
         _overlay = new OverlayWindow(settings, _media, new LyricsService());
         _presence = new DiscordPresence(DispatcherQueue.GetForCurrentThread(), settings);
@@ -46,6 +47,8 @@ public partial class App : Application
         _hotKeys.Register(HotKeys.ToggleOverlay, () => overlay.UserVisible = !overlay.UserVisible);
         _hotKeys.Register(HotKeys.Ghost, () => overlay.Ghost = !overlay.Ghost);
         _hotKeys.Register(HotKeys.CycleLayout, overlay.CycleMode);
+        var tray = _tray;
+        _hotKeys.Register(HotKeys.ControlPanel, tray.TogglePanelFromKeyboard);
 
         await _media.StartAsync();
     }

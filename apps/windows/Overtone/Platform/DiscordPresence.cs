@@ -158,7 +158,8 @@ public sealed class DiscordPresence : IDisposable
         var t = s.Track;
         // Every text sent to Discord passes the word filter.
         var title = Fit(Clean(string.IsNullOrWhiteSpace(t.Title) ? "Untitled" : t.Title));
-        var artist = Fit(string.IsNullOrWhiteSpace(t.Artist) ? title : Clean(t.Artist));
+        // A file without an artist tag is named by its album instead.
+        var artist = Fit(string.IsNullOrWhiteSpace(t.Byline) ? title : Clean(t.Byline));
         var lyric = s.Lyric is null ? null : Clean(s.Lyric);
         var service = Service(t.SourceApp);
         var serviceIcon = Icon(service);
@@ -167,19 +168,28 @@ public sealed class DiscordPresence : IDisposable
 
         // Card lines: title, artist, then the current lyric (the album between lines).
         // The member list reads "Listening to …" from state (status_display_type 1)
-        // or details (2), per the user's choice. For the lyric, the lyric moves into
-        // state and the artist takes its place on the card's third line.
-        var lyricStatus = StatusLine == DiscordStatusLine.Lyric && lyric is not null;
+        // or details (2), per the user's choice. For the lyric or the album, that moves
+        // into state and the artist takes its place on the card's third line (beside
+        // the lyric, for the album).
+        var swapped = StatusLine switch
+        {
+            DiscordStatusLine.Lyric => lyric is null ? null : Fit(lyric),
+            DiscordStatusLine.Album => album is null ? null : Fit(album),
+            _ => null,
+        };
+        var third = swapped is null ? lyric ?? album ?? title
+            : StatusLine == DiscordStatusLine.Album ? lyric ?? artist
+            : artist;
         var activity = new JsonObject
         {
             ["type"] = 2,                 // Listening
             ["status_display_type"] = StatusLine == DiscordStatusLine.Title ? 2 : 1,
             ["details"] = title,
-            ["state"] = lyricStatus ? Fit(lyric!) : artist,
+            ["state"] = swapped ?? artist,
             ["assets"] = new JsonObject
             {
                 ["large_image"] = cover ?? (_assets.Contains("overtone") ? "overtone" : serviceIcon),
-                ["large_text"] = Fit(lyricStatus ? artist : lyric ?? album ?? title),
+                ["large_text"] = Fit(third),
             },
         };
         if (serviceIcon is not null)
@@ -242,16 +252,39 @@ public sealed class DiscordPresence : IDisposable
         return s.Length < 2 ? s + "​​"[..(2 - s.Length)] : s;
     }
 
-    private static string CoverKey(TrackInfo t) => $"{t.Artist}\u0001{t.Title}";
+    private static string CoverKey(TrackInfo t) => $"{t.Artist}\u0001{t.Title}\u0001{(t.Art is { } a ? CoverUploads.Hash(a) : "")}";
 
-    /// <summary>Discord needs a public image URL; the OS only gives pixels. Looked up once per song.</summary>
+    private readonly CoverUploads _uploads = new();
+
+    /// <summary>
+    /// Discord needs a public image URL; the OS only gives pixels. Looked up once per
+    /// song and cover: the catalogue cover that looks like the player's artwork, and
+    /// when none does (a local file, a rare release), the artwork itself, uploaded to
+    /// a temporary host. Without artwork, the best match by name.
+    /// </summary>
     private async Task ResolveCoverAsync(TrackInfo t)
     {
         var key = CoverKey(t);
         if (_covers.ContainsKey(key)) return;
         _covers[key] = null;
         string? url = null;
-        try { url = await Task.Run(() => CoreLib.CoverUrl(t.Title, t.Artist, t.Album, t.DurationMs)); }
+        try
+        {
+            if (t.Art is { } art)
+            {
+                var (look, match) = await Task.Run(() => CoreLib.CoverLike(t.Title, t.Artist, t.Album, t.DurationMs, art.Rgba, art.Width, art.Height));
+                url = look switch
+                {
+                    CoreLib.CoverLook.Match => match,
+                    CoreLib.CoverLook.None => await _uploads.UrlForAsync(art),
+                    _ => null, // no catalogue reachable: offline, so an upload would fail too
+                };
+            }
+            else
+            {
+                url = await Task.Run(() => CoreLib.CoverUrl(t.Title, t.Artist, t.Album, t.DurationMs));
+            }
+        }
         catch (Exception ex) { Settings.LogError(ex); }
         if (url is null) return;
         _covers[key] = url;

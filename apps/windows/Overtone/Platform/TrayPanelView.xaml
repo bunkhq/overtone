@@ -1,0 +1,807 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="Overtone.Platform.TrayPanelView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    FontFamily="{StaticResource UiFont}">
+    <!--
+      The tray menu: a context menu drawn in the overlay's live palette. One row per
+      setting, grouped by separators; on/off settings carry a switch, short choices sit
+      on their row as pills, longer lists open a flyout to the side. The app ships
+      without the Fluent control dictionary, so every control here has its own template
+      (toggle buttons presenting element content: a RadioButton, or a template
+      presenting a bare string, faults in layout without that dictionary). Keyboard
+      focus shows as a 2 px ink ring.
+    -->
+    <UserControl.Resources>
+        <!-- The menu's own palette brushes, same keys as App.xaml's: a brush recoloured
+             every frame while drawn in two windows crashes WinUI, so the menu's theme
+             (TrayPanelView.Theme) drives this copy. Declared first, so the styles below
+             resolve to them. -->
+        <SolidColorBrush x:Key="BaseBrush" Color="#2A1838" />
+        <SolidColorBrush x:Key="ScrimBrush" Color="#CC2A1838" />
+        <SolidColorBrush x:Key="AccentBrush" Color="#FF8A5C" />
+        <SolidColorBrush x:Key="InkBrush" Color="#FFF7F2" />
+        <SolidColorBrush x:Key="TitleBrush" Color="#FFF7F2" />
+        <SolidColorBrush x:Key="InkSoftBrush" Color="#D9C8D8" />
+        <SolidColorBrush x:Key="InkFaintBrush" Color="#A893A8" />
+        <SolidColorBrush x:Key="TrackBrush" Color="#29FFF7F2" />
+        <SolidColorBrush x:Key="HoverBrush" Color="#1FFFF7F2" />
+        <SolidColorBrush x:Key="PressedBrush" Color="#33FFF7F2" />
+        <SolidColorBrush x:Key="RimBrush" Color="#14FFF7F2" />
+        <SolidColorBrush x:Key="PlaceholderBrush" Color="#1AFFF7F2" />
+
+        <FontFamily x:Key="Icons">Segoe Fluent Icons,Segoe MDL2 Assets</FontFamily>
+
+        <Style x:Key="RowIcon" TargetType="FontIcon">
+            <Setter Property="FontFamily" Value="{StaticResource Icons}" />
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="Foreground" Value="{StaticResource InkSoftBrush}" />
+            <Setter Property="Width" Value="16" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="RowLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13.5" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <!-- Trailing text on a row: a shortcut, or the current choice of a flyout row. -->
+        <Style x:Key="RowHint" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{StaticResource InkSoftBrush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style x:Key="Chevron" TargetType="FontIcon">
+            <Setter Property="FontFamily" Value="{StaticResource Icons}" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Glyph" Value="&#xE76C;" />
+            <Setter Property="Foreground" Value="{StaticResource InkSoftBrush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="Separator" TargetType="Rectangle">
+            <Setter Property="Height" Value="1" />
+            <Setter Property="Fill" Value="{StaticResource RimBrush}" />
+            <Setter Property="Margin" Value="0,4,0,4" />
+        </Style>
+
+        <!-- An action row: icon, label, anything trailing. -->
+        <Style x:Key="MenuButton" TargetType="Button">
+            <Setter Property="MinHeight" Value="36" />
+            <Setter Property="Margin" Value="4,0,4,0" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="UseSystemFocusVisuals" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid x:Name="RootGrid" CornerRadius="5" Background="Transparent" Padding="12,0,12,0">
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal" />
+                                    <VisualState x:Name="PointerOver">
+                                        <VisualState.Setters>
+                                            <Setter Target="RootGrid.Background" Value="{StaticResource HoverBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Pressed">
+                                        <VisualState.Setters>
+                                            <Setter Target="RootGrid.Background" Value="{StaticResource PressedBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Disabled">
+                                        <VisualState.Setters>
+                                            <Setter Target="Body.Opacity" Value="0.4" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                </VisualStateGroup>
+                                <VisualStateGroup x:Name="FocusStates">
+                                    <VisualState x:Name="Focused">
+                                        <VisualState.Setters>
+                                            <Setter Target="Ring.Opacity" Value="1" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Unfocused" />
+                                    <VisualState x:Name="PointerFocused" />
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                            <ContentPresenter x:Name="Body" Foreground="{StaticResource InkBrush}" Content="{TemplateBinding Content}"
+                                              HorizontalContentAlignment="Stretch" VerticalAlignment="Center" />
+                            <Border x:Name="Ring" Margin="-12,0,-12,0" BorderThickness="2" BorderBrush="{StaticResource InkBrush}"
+                                    CornerRadius="5" Opacity="0" IsHitTestVisible="False" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- An on/off row: icon, label, shortcut, then a switch in the accent. -->
+        <Style x:Key="MenuToggle" TargetType="ToggleButton">
+            <Setter Property="MinHeight" Value="36" />
+            <Setter Property="Margin" Value="4,0,4,0" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="UseSystemFocusVisuals" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Grid x:Name="RootGrid" CornerRadius="5" Background="Transparent" Padding="12,0,12,0" ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal" />
+                                    <VisualState x:Name="PointerOver">
+                                        <VisualState.Setters>
+                                            <Setter Target="RootGrid.Background" Value="{StaticResource HoverBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Pressed">
+                                        <VisualState.Setters>
+                                            <Setter Target="RootGrid.Background" Value="{StaticResource PressedBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Disabled">
+                                        <VisualState.Setters>
+                                            <Setter Target="Body.Opacity" Value="0.4" />
+                                            <Setter Target="Track.Opacity" Value="0.4" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Checked">
+                                        <VisualState.Setters>
+                                            <Setter Target="Track.Background" Value="{StaticResource AccentBrush}" />
+                                            <Setter Target="Thumb.Fill" Value="{StaticResource BaseBrush}" />
+                                            <Setter Target="Thumb.HorizontalAlignment" Value="Right" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="CheckedPointerOver">
+                                        <VisualState.Setters>
+                                            <Setter Target="RootGrid.Background" Value="{StaticResource HoverBrush}" />
+                                            <Setter Target="Track.Background" Value="{StaticResource AccentBrush}" />
+                                            <Setter Target="Thumb.Fill" Value="{StaticResource BaseBrush}" />
+                                            <Setter Target="Thumb.HorizontalAlignment" Value="Right" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="CheckedPressed">
+                                        <VisualState.Setters>
+                                            <Setter Target="RootGrid.Background" Value="{StaticResource PressedBrush}" />
+                                            <Setter Target="Track.Background" Value="{StaticResource AccentBrush}" />
+                                            <Setter Target="Thumb.Fill" Value="{StaticResource BaseBrush}" />
+                                            <Setter Target="Thumb.HorizontalAlignment" Value="Right" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="CheckedDisabled">
+                                        <VisualState.Setters>
+                                            <Setter Target="Body.Opacity" Value="0.4" />
+                                            <Setter Target="Track.Opacity" Value="0.4" />
+                                            <Setter Target="Track.Background" Value="{StaticResource AccentBrush}" />
+                                            <Setter Target="Thumb.Fill" Value="{StaticResource BaseBrush}" />
+                                            <Setter Target="Thumb.HorizontalAlignment" Value="Right" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                </VisualStateGroup>
+                                <VisualStateGroup x:Name="FocusStates">
+                                    <VisualState x:Name="Focused">
+                                        <VisualState.Setters>
+                                            <Setter Target="Ring.Opacity" Value="1" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Unfocused" />
+                                    <VisualState x:Name="PointerFocused" />
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                            <ContentPresenter x:Name="Body" Foreground="{StaticResource InkBrush}" Content="{TemplateBinding Content}"
+                                              HorizontalContentAlignment="Stretch" VerticalAlignment="Center" />
+                            <Border x:Name="Track" Grid.Column="1" Width="34" Height="18" CornerRadius="9"
+                                    Background="{StaticResource TrackBrush}" Padding="4,0,4,0" VerticalAlignment="Center">
+                                <Ellipse x:Name="Thumb" Width="10" Height="10" Fill="{StaticResource InkSoftBrush}"
+                                         HorizontalAlignment="Left" VerticalAlignment="Center" />
+                            </Border>
+                            <Border x:Name="Ring" Grid.ColumnSpan="2" Margin="-12,0,-12,0" BorderThickness="2"
+                                    BorderBrush="{StaticResource InkBrush}" CornerRadius="5" Opacity="0" IsHitTestVisible="False" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- A row that opens a flyout to the side: checked while its flyout is open. -->
+        <Style x:Key="MenuSub" TargetType="ToggleButton">
+            <Setter Property="MinHeight" Value="36" />
+            <Setter Property="Margin" Value="4,0,4,0" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="UseSystemFocusVisuals" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Grid x:Name="RootGrid" CornerRadius="5" Background="Transparent" Padding="12,0,12,0">
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal" />
+                                    <VisualState x:Name="PointerOver">
+                                        <VisualState.Setters>
+                                            <Setter Target="RootGrid.Background" Value="{StaticResource HoverBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Pressed">
+                                        <VisualState.Setters>
+                                            <Setter Target="RootGrid.Background" Value="{StaticResource PressedBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Disabled">
+                                        <VisualState.Setters>
+                                            <Setter Target="Body.Opacity" Value="0.4" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Checked">
+                                        <VisualState.Setters>
+                                            <Setter Target="RootGrid.Background" Value="{StaticResource HoverBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="CheckedPointerOver">
+                                        <VisualState.Setters>
+                                            <Setter Target="RootGrid.Background" Value="{StaticResource HoverBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="CheckedPressed">
+                                        <VisualState.Setters>
+                                            <Setter Target="RootGrid.Background" Value="{StaticResource PressedBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="CheckedDisabled">
+                                        <VisualState.Setters>
+                                            <Setter Target="Body.Opacity" Value="0.4" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                </VisualStateGroup>
+                                <VisualStateGroup x:Name="FocusStates">
+                                    <VisualState x:Name="Focused">
+                                        <VisualState.Setters>
+                                            <Setter Target="Ring.Opacity" Value="1" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Unfocused" />
+                                    <VisualState x:Name="PointerFocused" />
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                            <ContentPresenter x:Name="Body" Foreground="{StaticResource InkBrush}" Content="{TemplateBinding Content}"
+                                              HorizontalContentAlignment="Stretch" VerticalAlignment="Center" />
+                            <Border x:Name="Ring" Margin="-12,0,-12,0" BorderThickness="2" BorderBrush="{StaticResource InkBrush}"
+                                    CornerRadius="5" Opacity="0" IsHitTestVisible="False" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- One choice in a flyout list: a check in the accent on the chosen one. -->
+        <Style x:Key="MenuOption" TargetType="ToggleButton">
+            <Setter Property="MinHeight" Value="34" />
+            <Setter Property="Margin" Value="4,0,4,0" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="UseSystemFocusVisuals" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Grid x:Name="RootGrid" CornerRadius="5" Background="Transparent" Padding="10,0,14,0" ColumnSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="16" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal" />
+                                    <VisualState x:Name="PointerOver">
+                                        <VisualState.Setters>
+                                            <Setter Target="RootGrid.Background" Value="{StaticResource HoverBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Pressed">
+                                        <VisualState.Setters>
+                                            <Setter Target="RootGrid.Background" Value="{StaticResource PressedBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Disabled">
+                                        <VisualState.Setters>
+                                            <Setter Target="Body.Opacity" Value="0.4" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Checked">
+                                        <VisualState.Setters>
+                                            <Setter Target="Check.Opacity" Value="1" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="CheckedPointerOver">
+                                        <VisualState.Setters>
+                                            <Setter Target="RootGrid.Background" Value="{StaticResource HoverBrush}" />
+                                            <Setter Target="Check.Opacity" Value="1" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="CheckedPressed">
+                                        <VisualState.Setters>
+                                            <Setter Target="RootGrid.Background" Value="{StaticResource PressedBrush}" />
+                                            <Setter Target="Check.Opacity" Value="1" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="CheckedDisabled">
+                                        <VisualState.Setters>
+                                            <Setter Target="Body.Opacity" Value="0.4" />
+                                            <Setter Target="Check.Opacity" Value="0.4" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                </VisualStateGroup>
+                                <VisualStateGroup x:Name="FocusStates">
+                                    <VisualState x:Name="Focused">
+                                        <VisualState.Setters>
+                                            <Setter Target="Ring.Opacity" Value="1" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Unfocused" />
+                                    <VisualState x:Name="PointerFocused" />
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                            <FontIcon x:Name="Check" Glyph="&#xE73E;" FontFamily="{StaticResource Icons}" FontSize="13"
+                                      Foreground="{StaticResource AccentBrush}" Opacity="0" VerticalAlignment="Center" />
+                            <ContentPresenter x:Name="Body" Grid.Column="1" Foreground="{StaticResource InkBrush}" Content="{TemplateBinding Content}"
+                                              HorizontalContentAlignment="Stretch" VerticalAlignment="Center" />
+                            <Border x:Name="Ring" Grid.ColumnSpan="2" Margin="-10,0,-14,0" BorderThickness="2"
+                                    BorderBrush="{StaticResource InkBrush}" CornerRadius="5" Opacity="0" IsHitTestVisible="False" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- One pill of an inline choice; the chosen one takes the accent. -->
+        <Style x:Key="Pill" TargetType="ToggleButton">
+            <Setter Property="Height" Value="24" />
+            <Setter Property="MinWidth" Value="44" />
+            <Setter Property="UseSystemFocusVisuals" Value="False" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Grid>
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal" />
+                                    <VisualState x:Name="PointerOver">
+                                        <VisualState.Setters>
+                                            <Setter Target="RootGrid.Background" Value="{StaticResource HoverBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Pressed">
+                                        <VisualState.Setters>
+                                            <Setter Target="RootGrid.Background" Value="{StaticResource PressedBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Disabled">
+                                        <VisualState.Setters>
+                                            <Setter Target="Body.Opacity" Value="0.4" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Checked">
+                                        <VisualState.Setters>
+                                            <Setter Target="RootGrid.Background" Value="{StaticResource AccentBrush}" />
+                                            <Setter Target="Body.Foreground" Value="{StaticResource BaseBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="CheckedPointerOver">
+                                        <VisualState.Setters>
+                                            <Setter Target="RootGrid.Background" Value="{StaticResource AccentBrush}" />
+                                            <Setter Target="Body.Foreground" Value="{StaticResource BaseBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="CheckedPressed">
+                                        <VisualState.Setters>
+                                            <Setter Target="RootGrid.Background" Value="{StaticResource AccentBrush}" />
+                                            <Setter Target="Body.Foreground" Value="{StaticResource BaseBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="CheckedDisabled">
+                                        <VisualState.Setters>
+                                            <Setter Target="RootGrid.Background" Value="{StaticResource AccentBrush}" />
+                                            <Setter Target="Body.Foreground" Value="{StaticResource BaseBrush}" />
+                                            <Setter Target="RootGrid.Opacity" Value="0.4" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                </VisualStateGroup>
+                                <VisualStateGroup x:Name="FocusStates">
+                                    <VisualState x:Name="Focused">
+                                        <VisualState.Setters>
+                                            <Setter Target="Ring.Opacity" Value="1" />
+                                            <Setter Target="Hairline.Opacity" Value="1" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Unfocused" />
+                                    <VisualState x:Name="PointerFocused" />
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                            <Grid x:Name="RootGrid" CornerRadius="4" Background="Transparent" Padding="10,0,10,0">
+                                <ContentPresenter x:Name="Body" Foreground="{StaticResource InkSoftBrush}" Content="{TemplateBinding Content}"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Grid>
+                            <!-- Two-tone ring: a base hairline inside the ink ring keeps it visible on the accent. -->
+                            <Border x:Name="Hairline" BorderThickness="1" BorderBrush="{StaticResource BaseBrush}" CornerRadius="4" Opacity="0" IsHitTestVisible="False" />
+                            <Border x:Name="Ring" Margin="-2" BorderThickness="2" BorderBrush="{StaticResource InkBrush}" CornerRadius="6" Opacity="0" IsHitTestVisible="False" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Transport: round icon buttons; play/pause on an accent disc. -->
+        <Style x:Key="IconButton" TargetType="Button">
+            <Setter Property="Width" Value="32" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="CornerRadius" Value="16" />
+            <Setter Property="UseSystemFocusVisuals" Value="False" />
+            <Setter Property="Foreground" Value="{StaticResource InkBrush}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid x:Name="RootGrid" CornerRadius="{TemplateBinding CornerRadius}" Background="{TemplateBinding Background}">
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal" />
+                                    <VisualState x:Name="PointerOver">
+                                        <VisualState.Setters>
+                                            <Setter Target="Wash.Background" Value="{StaticResource HoverBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Pressed">
+                                        <VisualState.Setters>
+                                            <Setter Target="Wash.Background" Value="{StaticResource PressedBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Disabled">
+                                        <VisualState.Setters>
+                                            <Setter Target="RootGrid.Opacity" Value="0.4" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                </VisualStateGroup>
+                                <VisualStateGroup x:Name="FocusStates">
+                                    <VisualState x:Name="Focused">
+                                        <VisualState.Setters>
+                                            <Setter Target="Ring.Opacity" Value="1" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Unfocused" />
+                                    <VisualState x:Name="PointerFocused" />
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                            <Border x:Name="Wash" Background="Transparent" CornerRadius="{TemplateBinding CornerRadius}" />
+                            <ContentPresenter Foreground="{TemplateBinding Foreground}" Content="{TemplateBinding Content}"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <Border x:Name="Ring" BorderThickness="2" BorderBrush="{StaticResource InkBrush}"
+                                    CornerRadius="{TemplateBinding CornerRadius}" Opacity="0" IsHitTestVisible="False" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid x:Name="Root" Width="320">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <!-- Drawn look: the palette's ground. Native look: transparent over tinted Acrylic. -->
+        <Rectangle x:Name="Ground" Grid.RowSpan="2" Fill="{StaticResource BaseBrush}" />
+
+        <!-- Now playing: one slim strip, over the blurred cover in the drawn look. -->
+        <Grid x:Name="Header" BorderThickness="0,0,0,1" BorderBrush="{StaticResource RimBrush}">
+            <!-- A brush, not an Image: the square bitmap must not set the strip's height. -->
+            <Border x:Name="Backdrop">
+                <Border.Background>
+                    <ImageBrush x:Name="BackdropFill" Stretch="UniformToFill" />
+                </Border.Background>
+            </Border>
+            <Rectangle x:Name="HeaderScrim" Fill="{StaticResource ScrimBrush}" />
+            <Grid Padding="12,10,8,10" ColumnSpacing="10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="40" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Border x:Name="Art" Width="40" Height="40" CornerRadius="6" Background="{StaticResource PlaceholderBrush}">
+                    <Grid>
+                        <FontIcon Glyph="&#xEC4F;" FontFamily="{StaticResource Icons}" FontSize="16"
+                                  Foreground="{StaticResource InkFaintBrush}" />
+                        <Border x:Name="ArtImage" CornerRadius="6">
+                            <Border.Background>
+                                <ImageBrush x:Name="ArtFill" Stretch="UniformToFill" />
+                            </Border.Background>
+                        </Border>
+                    </Grid>
+                </Border>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock x:Name="TitleText" FontFamily="{StaticResource DisplayFont}" FontSize="14" FontWeight="SemiBold"
+                               Foreground="{StaticResource TitleBrush}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                    <TextBlock x:Name="BylineText" FontSize="12" Foreground="{StaticResource InkSoftBrush}"
+                               TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                </StackPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center"
+                            XYFocusKeyboardNavigation="Enabled">
+                    <Button x:Name="PrevButton" Style="{StaticResource IconButton}" AutomationProperties.Name="Previous track">
+                        <FontIcon Glyph="&#xF8AC;" FontFamily="{StaticResource Icons}" FontSize="13" />
+                    </Button>
+                    <Button x:Name="PlayButton" Style="{StaticResource IconButton}" Background="{StaticResource AccentBrush}"
+                            Foreground="{StaticResource BaseBrush}" AutomationProperties.Name="Play">
+                        <FontIcon x:Name="PlayGlyph" Glyph="&#xF5B0;" FontFamily="{StaticResource Icons}" FontSize="13" />
+                    </Button>
+                    <Button x:Name="NextButton" Style="{StaticResource IconButton}" AutomationProperties.Name="Next track">
+                        <FontIcon Glyph="&#xF8AD;" FontFamily="{StaticResource Icons}" FontSize="13" />
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Grid>
+
+        <!-- The menu. -->
+        <StackPanel x:Name="Menu" Grid.Row="1" Padding="0,4,0,4" XYFocusKeyboardNavigation="Enabled">
+            <ToggleButton x:Name="OverlayToggle" Style="{StaticResource MenuToggle}" AutomationProperties.Name="Show overlay">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE890;" Style="{StaticResource RowIcon}" />
+                    <TextBlock Grid.Column="1" Text="Show overlay" Style="{StaticResource RowLabel}" />
+                    <TextBlock x:Name="OverlayKey" Grid.Column="2" Style="{StaticResource RowHint}" />
+                </Grid>
+            </ToggleButton>
+            <!-- Layout: a plain row holding its pills, so each pill is its own focus stop. -->
+            <Grid x:Name="LayoutRow" MinHeight="36" Margin="4,0,4,0" Padding="12,0,12,0" ColumnSpacing="12" Background="Transparent">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <FontIcon Glyph="&#xE8A9;" Style="{StaticResource RowIcon}" />
+                <TextBlock Grid.Column="1" Text="Layout" Style="{StaticResource RowLabel}" Foreground="{StaticResource InkBrush}" />
+                <Border Grid.Column="2" Background="{StaticResource PlaceholderBrush}" CornerRadius="6" Padding="2" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="2" XYFocusKeyboardNavigation="Enabled">
+                        <ToggleButton x:Name="PillPill" Style="{StaticResource Pill}">
+                            <TextBlock x:Name="PillPillText" Text="Pill" />
+                        </ToggleButton>
+                        <ToggleButton x:Name="CardPill" Style="{StaticResource Pill}">
+                            <TextBlock Text="Card" />
+                        </ToggleButton>
+                        <ToggleButton x:Name="LyricsPill" Style="{StaticResource Pill}">
+                            <TextBlock x:Name="LyricsPillText" Text="Lyrics" />
+                        </ToggleButton>
+                    </StackPanel>
+                </Border>
+            </Grid>
+            <ToggleButton x:Name="LyricsOnlyToggle" Style="{StaticResource MenuToggle}" AutomationProperties.Name="Lyrics only">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE8D2;" Style="{StaticResource RowIcon}" />
+                    <TextBlock Grid.Column="1" Text="Lyrics only" Style="{StaticResource RowLabel}" />
+                </Grid>
+            </ToggleButton>
+            <ToggleButton x:Name="GhostToggle" Style="{StaticResource MenuToggle}" AutomationProperties.Name="Ghost mode">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE81E;" Style="{StaticResource RowIcon}" />
+                    <TextBlock Grid.Column="1" Text="Ghost mode" Style="{StaticResource RowLabel}" />
+                    <TextBlock x:Name="GhostKey" Grid.Column="2" Style="{StaticResource RowHint}" />
+                </Grid>
+            </ToggleButton>
+
+            <Rectangle Style="{StaticResource Separator}" />
+
+            <ToggleButton x:Name="BackgroundRow" Style="{StaticResource MenuSub}" AutomationProperties.Name="Background">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE790;" Style="{StaticResource RowIcon}" />
+                    <TextBlock Grid.Column="1" Text="Background" Style="{StaticResource RowLabel}" />
+                    <TextBlock x:Name="BackgroundValue" Grid.Column="2" Style="{StaticResource RowHint}" />
+                    <FontIcon Grid.Column="3" Style="{StaticResource Chevron}" Margin="-4,0,0,0" />
+                </Grid>
+            </ToggleButton>
+            <ToggleButton x:Name="ToneRow" Style="{StaticResource MenuSub}" AutomationProperties.Name="Tone">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE706;" Style="{StaticResource RowIcon}" />
+                    <TextBlock Grid.Column="1" Text="Tone" Style="{StaticResource RowLabel}" />
+                    <TextBlock x:Name="ToneValue" Grid.Column="2" Style="{StaticResource RowHint}" />
+                    <FontIcon Grid.Column="3" Style="{StaticResource Chevron}" Margin="-4,0,0,0" />
+                </Grid>
+            </ToggleButton>
+            <ToggleButton x:Name="NativeToggle" Style="{StaticResource MenuToggle}" AutomationProperties.Name="Native Windows look">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE7F4;" Style="{StaticResource RowIcon}" />
+                    <TextBlock Grid.Column="1" Text="Native Windows look" Style="{StaticResource RowLabel}" />
+                </Grid>
+            </ToggleButton>
+
+            <Rectangle Style="{StaticResource Separator}" />
+
+            <ToggleButton x:Name="DiscordToggle" Style="{StaticResource MenuToggle}" AutomationProperties.Name="Show in Discord status">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE8F2;" Style="{StaticResource RowIcon}" />
+                    <TextBlock Grid.Column="1" Text="Discord status" Style="{StaticResource RowLabel}" />
+                </Grid>
+            </ToggleButton>
+            <ToggleButton x:Name="StatusRow" Style="{StaticResource MenuSub}" AutomationProperties.Name="Discord status shows">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border Width="16" />
+                    <TextBlock Grid.Column="1" Text="Shows" Style="{StaticResource RowLabel}" />
+                    <TextBlock x:Name="StatusValue" Grid.Column="2" Style="{StaticResource RowHint}" />
+                    <FontIcon Grid.Column="3" Style="{StaticResource Chevron}" Margin="-4,0,0,0" />
+                </Grid>
+            </ToggleButton>
+            <ToggleButton x:Name="FilterRow" Style="{StaticResource MenuSub}" AutomationProperties.Name="Discord word filter">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border Width="16" />
+                    <TextBlock Grid.Column="1" Text="Word filter" Style="{StaticResource RowLabel}" />
+                    <TextBlock x:Name="FilterValue" Grid.Column="2" Style="{StaticResource RowHint}" />
+                    <FontIcon Grid.Column="3" Style="{StaticResource Chevron}" Margin="-4,0,0,0" />
+                </Grid>
+            </ToggleButton>
+
+            <Rectangle Style="{StaticResource Separator}" />
+
+            <ToggleButton x:Name="MoreRow" Style="{StaticResource MenuSub}" AutomationProperties.Name="More settings">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE713;" Style="{StaticResource RowIcon}" />
+                    <TextBlock Grid.Column="1" Text="More settings" Style="{StaticResource RowLabel}" />
+                    <FontIcon Grid.Column="2" Style="{StaticResource Chevron}" />
+                </Grid>
+            </ToggleButton>
+            <Button x:Name="UpdateRow" Style="{StaticResource MenuButton}" Visibility="Collapsed">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE896;" Style="{StaticResource RowIcon}" Foreground="{StaticResource AccentBrush}" />
+                    <TextBlock x:Name="UpdateText" Grid.Column="1" Style="{StaticResource RowLabel}" FontWeight="SemiBold" />
+                </Grid>
+            </Button>
+            <Button x:Name="QuitRow" Style="{StaticResource MenuButton}" AutomationProperties.Name="Quit Overtone">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE7E8;" Style="{StaticResource RowIcon}" />
+                    <TextBlock Grid.Column="1" Text="Quit" Style="{StaticResource RowLabel}" />
+                </Grid>
+            </Button>
+        </StackPanel>
+
+        <!-- The side flyout: its own window (not clipped to the menu's), one list at a time. -->
+        <Popup x:Name="Flyout" Grid.RowSpan="2" ShouldConstrainToRootBounds="False" IsLightDismissEnabled="False">
+            <Border x:Name="FlyoutCard" Width="236" Background="{StaticResource BaseBrush}" CornerRadius="8"
+                    BorderThickness="1" BorderBrush="{StaticResource RimBrush}">
+                <Grid>
+                    <StackPanel x:Name="BackgroundList" Padding="0,4,0,4" XYFocusKeyboardNavigation="Enabled">
+                        <ToggleButton x:Name="BgCover" Style="{StaticResource MenuOption}"><TextBlock Text="Blurred cover" Style="{StaticResource RowLabel}" /></ToggleButton>
+                        <ToggleButton x:Name="BgGradient" Style="{StaticResource MenuOption}"><TextBlock Text="Gradient" Style="{StaticResource RowLabel}" /></ToggleButton>
+                        <ToggleButton x:Name="BgSolid" Style="{StaticResource MenuOption}"><TextBlock Text="Solid colour" Style="{StaticResource RowLabel}" /></ToggleButton>
+                        <ToggleButton x:Name="BgNone" Style="{StaticResource MenuOption}" AutomationProperties.Name="None: text only, no album colours">
+                            <TextBlock Text="None (text only)" Style="{StaticResource RowLabel}" />
+                        </ToggleButton>
+                        <StackPanel x:Name="MatchBehindPanel">
+                            <Rectangle Style="{StaticResource Separator}" />
+                            <ToggleButton x:Name="MatchBehindToggle" Style="{StaticResource MenuToggle}"
+                                          AutomationProperties.Name="Adapt text to what's behind">
+                                <TextBlock Text="Adapt to what's behind" Style="{StaticResource RowLabel}" />
+                            </ToggleButton>
+                            <ToggleButton x:Name="TextColoursToggle" Style="{StaticResource MenuToggle}"
+                                          AutomationProperties.Name="Text in album colours">
+                                <TextBlock Text="Album colours" Style="{StaticResource RowLabel}" />
+                            </ToggleButton>
+                            <ToggleButton x:Name="TextShadowToggle" Style="{StaticResource MenuToggle}"
+                                          AutomationProperties.Name="Shadow behind the text">
+                                <TextBlock Text="Text shadow" Style="{StaticResource RowLabel}" />
+                            </ToggleButton>
+                        </StackPanel>
+                        <TextBlock x:Name="BackgroundNote" FontSize="12" Foreground="{StaticResource InkSoftBrush}" Margin="16,6,14,6"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                    <StackPanel x:Name="ToneList" Padding="0,4,0,4" XYFocusKeyboardNavigation="Enabled" Visibility="Collapsed">
+                        <ToggleButton x:Name="ToneAuto" Style="{StaticResource MenuOption}"><TextBlock Text="Match the cover" Style="{StaticResource RowLabel}" /></ToggleButton>
+                        <ToggleButton x:Name="ToneSystem" Style="{StaticResource MenuOption}"><TextBlock Text="Match system" Style="{StaticResource RowLabel}" /></ToggleButton>
+                        <ToggleButton x:Name="ToneDark" Style="{StaticResource MenuOption}"><TextBlock Text="Dark" Style="{StaticResource RowLabel}" /></ToggleButton>
+                        <ToggleButton x:Name="ToneLight" Style="{StaticResource MenuOption}"><TextBlock Text="Light" Style="{StaticResource RowLabel}" /></ToggleButton>
+                    </StackPanel>
+                    <StackPanel x:Name="StatusList" Padding="0,4,0,4" XYFocusKeyboardNavigation="Enabled" Visibility="Collapsed">
+                        <ToggleButton x:Name="StatusArtist" Style="{StaticResource MenuOption}"><TextBlock Text="Artist" Style="{StaticResource RowLabel}" /></ToggleButton>
+                        <ToggleButton x:Name="StatusTitle" Style="{StaticResource MenuOption}"><TextBlock Text="Song title" Style="{StaticResource RowLabel}" /></ToggleButton>
+                        <ToggleButton x:Name="StatusAlbum" Style="{StaticResource MenuOption}"><TextBlock Text="Album" Style="{StaticResource RowLabel}" /></ToggleButton>
+                        <ToggleButton x:Name="StatusLyric" Style="{StaticResource MenuOption}"><TextBlock Text="Current lyric" Style="{StaticResource RowLabel}" /></ToggleButton>
+                    </StackPanel>
+                    <StackPanel x:Name="FilterList" Padding="0,4,0,4" XYFocusKeyboardNavigation="Enabled" Visibility="Collapsed">
+                        <ToggleButton x:Name="FilterAll" Style="{StaticResource MenuOption}"><TextBlock Text="All swear words" Style="{StaticResource RowLabel}" /></ToggleButton>
+                        <ToggleButton x:Name="FilterOffensive" Style="{StaticResource MenuOption}"><TextBlock Text="Slurs and offensive terms" Style="{StaticResource RowLabel}" /></ToggleButton>
+                        <ToggleButton x:Name="FilterOff" Style="{StaticResource MenuOption}"><TextBlock Text="Off" Style="{StaticResource RowLabel}" /></ToggleButton>
+                    </StackPanel>
+                    <StackPanel x:Name="MoreList" Padding="0,4,0,4" XYFocusKeyboardNavigation="Enabled" Visibility="Collapsed">
+                        <ToggleButton x:Name="SnapToggle" Style="{StaticResource MenuToggle}" AutomationProperties.Name="Snap to screen edges">
+                            <TextBlock Text="Snap to screen edges" Style="{StaticResource RowLabel}" />
+                        </ToggleButton>
+                        <ToggleButton x:Name="GhostDimToggle" Style="{StaticResource MenuToggle}" AutomationProperties.Name="Dim in ghost mode">
+                            <TextBlock Text="Dim in ghost mode" Style="{StaticResource RowLabel}" />
+                        </ToggleButton>
+                        <ToggleButton x:Name="MusicOnlyToggle" Style="{StaticResource MenuToggle}" AutomationProperties.Name="Music only (ignore videos)">
+                            <TextBlock Text="Music only" Style="{StaticResource RowLabel}" />
+                        </ToggleButton>
+                        <ToggleButton x:Name="StartupToggle" Style="{StaticResource MenuToggle}" AutomationProperties.Name="Start with Windows">
+                            <TextBlock Text="Start with Windows" Style="{StaticResource RowLabel}" />
+                        </ToggleButton>
+                        <ToggleButton x:Name="TrayColourToggle" Style="{StaticResource MenuToggle}" AutomationProperties.Name="Coloured tray icon">
+                            <TextBlock Text="Coloured tray icon" Style="{StaticResource RowLabel}" />
+                        </ToggleButton>
+                        <Rectangle Style="{StaticResource Separator}" />
+                        <Button x:Name="CheckRow" Style="{StaticResource MenuButton}" AutomationProperties.Name="Check for updates">
+                            <TextBlock Text="Check for updates" Style="{StaticResource RowLabel}" />
+                        </Button>
+                        <Button x:Name="AboutRow" Style="{StaticResource MenuButton}" AutomationProperties.Name="About Overtone">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="About Overtone" Style="{StaticResource RowLabel}" />
+                                <TextBlock x:Name="VersionText" Grid.Column="1" Style="{StaticResource RowHint}" />
+                            </Grid>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Popup>
+    </Grid>
+</UserControl>

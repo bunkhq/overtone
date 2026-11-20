@@ -2,9 +2,10 @@ namespace Overtone.Platform;
 
 /// <summary>
 /// System-wide shortcuts, the same three as on macOS (there Control-Option-Command,
-/// here Ctrl+Alt+Shift): show or hide the overlay, ghost mode, next layout.
-/// RegisterHotKey on the overlay's window; a shortcut another app already holds is
-/// skipped, and the tray menu still works.
+/// here Ctrl+Alt+Shift): show or hide the overlay, ghost mode, next layout; plus, on
+/// Windows, the tray's control panel (the keyboard's way in, since the tray icon's
+/// own context-menu key no longer opens a menu). RegisterHotKey on the overlay's
+/// window; a shortcut another app already holds is skipped, and the tray icon still works.
 /// </summary>
 public sealed class HotKeys : IDisposable
 {
@@ -19,6 +20,7 @@ public sealed class HotKeys : IDisposable
     public static readonly Shortcut ToggleOverlay = new(1, 'O');
     public static readonly Shortcut Ghost = new(2, 'G');
     public static readonly Shortcut CycleLayout = new(3, 'L');
+    public static readonly Shortcut ControlPanel = new(4, 'M');
 
     private readonly nint _hwnd;
     private readonly Dictionary<int, Action> _actions = new();
